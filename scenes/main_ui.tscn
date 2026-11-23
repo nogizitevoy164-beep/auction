@@ -1,0 +1,508 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/main_ui.gd" id="1_mainui"]
+
+[ext_resource type="Script" path="res://scripts/game_field.gd" id="2_gfield"]
+
+[ext_resource type="Texture2D" path="res://icons/player_1.svg" id="3_p1"]
+
+[ext_resource type="Texture2D" path="res://icons/player_2.svg" id="4_p2"]
+
+[ext_resource type="Texture2D" path="res://icons/player_3.svg" id="5_p3"]
+
+[ext_resource type="Texture2D" path="res://icons/player_4.svg" id="6_p4"]
+
+[node name="MainUI" type="Control" unique_id=1299770060]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_mainui")
+
+[node name="MainHBox" type="HBoxContainer" parent="." unique_id=965137081]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="LeftColumn" type="VBoxContainer" parent="MainHBox" unique_id=837032461]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CharacterPanel" type="PanelContainer" parent="MainHBox/LeftColumn" unique_id=852050733]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CharacterVBox" type="VBoxContainer" parent="MainHBox/LeftColumn/CharacterPanel" unique_id=1473982138]
+layout_mode = 2
+
+[node name="CharacterName" type="Label" parent="MainHBox/LeftColumn/CharacterPanel/CharacterVBox" unique_id=316585082]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Имя персонажа"
+horizontal_alignment = 1
+
+[node name="CharacterPortrait" type="TextureRect" parent="MainHBox/LeftColumn/CharacterPanel/CharacterVBox" unique_id=1299455685]
+layout_mode = 2
+size_flags_vertical = 3
+expand_mode = 1
+stretch_mode = 5
+
+[node name="EquipmentPanel" type="PanelContainer" parent="MainHBox/LeftColumn" unique_id=98576439]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="EquipmentList" type="VBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel" unique_id=444088921]
+layout_mode = 2
+
+[node name="EquipHeader" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList" unique_id=86412069]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Экипировка"
+horizontal_alignment = 1
+
+[node name="SlotHead" type="HBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList"]
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotHead"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotHead"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Головной убор: —"
+
+[node name="SlotArmor" type="HBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList"]
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotArmor"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotArmor"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Броня: —"
+
+[node name="SlotGloves" type="HBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList"]
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotGloves"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotGloves"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Перчатки: —"
+
+[node name="SlotBoots" type="HBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList"]
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotBoots"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotBoots"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Обувь: —"
+
+[node name="SlotWeapon" type="HBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList"]
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotWeapon"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotWeapon"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Оружие: —"
+
+[node name="SlotRing1" type="HBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList"]
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotRing1"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotRing1"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Кольцо 1: —"
+
+[node name="SlotRing2" type="HBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList"]
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotRing2"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotRing2"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Кольцо 2: —"
+
+[node name="SlotNeck" type="HBoxContainer" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList"]
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotNeck"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="MainHBox/LeftColumn/EquipmentPanel/EquipmentList/SlotNeck"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Ожерелье: —"
+
+[node name="CenterColumn" type="VBoxContainer" parent="MainHBox" unique_id=1630733200]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="NewsPanel" type="PanelContainer" parent="MainHBox/CenterColumn" unique_id=1184764135]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+
+[node name="NewsLabel" type="Label" parent="MainHBox/CenterColumn/NewsPanel" unique_id=1904987247]
+layout_mode = 2
+text = "Новости: ..."
+vertical_alignment = 1
+text_overrun_behavior = 3
+
+[node name="RoundInfoPanel" type="PanelContainer" parent="MainHBox/CenterColumn" unique_id=1904987248]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+
+[node name="RoundInfoHBox" type="HBoxContainer" parent="MainHBox/CenterColumn/RoundInfoPanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="FieldNameLabel" type="Label" parent="MainHBox/CenterColumn/RoundInfoPanel/RoundInfoHBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Аукционное поле: —"
+vertical_alignment = 1
+
+[node name="RoundLabel" type="Label" parent="MainHBox/CenterColumn/RoundInfoPanel/RoundInfoHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "Раунд: —"
+vertical_alignment = 1
+horizontal_alignment = 1
+
+[node name="RoundTimerLabel" type="Label" parent="MainHBox/CenterColumn/RoundInfoPanel/RoundInfoHBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "0:40"
+vertical_alignment = 1
+horizontal_alignment = 1
+
+[node name="DefenseLabel" type="Label" parent="MainHBox/CenterColumn/RoundInfoPanel/RoundInfoHBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Защита ставки: ×—"
+vertical_alignment = 1
+horizontal_alignment = 2
+
+[node name="FieldHBox" type="HBoxContainer" parent="MainHBox/CenterColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="PlayersColumn" type="VBoxContainer" parent="MainHBox/CenterColumn/FieldHBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(132, 0)
+theme_override_constants/separation = 10
+
+[node name="PlayerRow0" type="HBoxContainer" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Avatar" type="TextureRect" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow0"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+texture = ExtResource("3_p1")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Info" type="VBoxContainer" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow0"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="NameLabel" type="Label" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow0/Info"]
+layout_mode = 2
+text = "Вы"
+
+[node name="BidLabel" type="Label" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow0/Info"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+
+[node name="PlayerRow1" type="HBoxContainer" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Avatar" type="TextureRect" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow1"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+texture = ExtResource("4_p2")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Info" type="VBoxContainer" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow1"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="NameLabel" type="Label" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow1/Info"]
+layout_mode = 2
+text = "Бот Айра"
+
+[node name="BidLabel" type="Label" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow1/Info"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+
+[node name="PlayerRow2" type="HBoxContainer" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Avatar" type="TextureRect" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow2"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+texture = ExtResource("5_p3")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Info" type="VBoxContainer" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow2"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="NameLabel" type="Label" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow2/Info"]
+layout_mode = 2
+text = "Бот Дорн"
+
+[node name="BidLabel" type="Label" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow2/Info"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+
+[node name="PlayerRow3" type="HBoxContainer" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Avatar" type="TextureRect" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow3"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+texture = ExtResource("6_p4")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Info" type="VBoxContainer" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow3"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="NameLabel" type="Label" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow3/Info"]
+layout_mode = 2
+text = "Бот Кира"
+
+[node name="BidLabel" type="Label" parent="MainHBox/CenterColumn/FieldHBox/PlayersColumn/PlayerRow3/Info"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+
+[node name="GameFieldPanel" type="PanelContainer" parent="MainHBox/CenterColumn/FieldHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="GameField" type="Control" parent="MainHBox/CenterColumn/FieldHBox/GameFieldPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+clip_contents = true
+script = ExtResource("2_gfield")
+
+[node name="RightColumn" type="VBoxContainer" parent="MainHBox" unique_id=1126801119]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="LogPanel" type="PanelContainer" parent="MainHBox/RightColumn" unique_id=1576955972]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LogVBox" type="VBoxContainer" parent="MainHBox/RightColumn/LogPanel" unique_id=825757037]
+layout_mode = 2
+
+[node name="LogHeader" type="Label" parent="MainHBox/RightColumn/LogPanel/LogVBox" unique_id=1531253774]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Лог"
+horizontal_alignment = 1
+
+[node name="LogScroll" type="ScrollContainer" parent="MainHBox/RightColumn/LogPanel/LogVBox" unique_id=2067684283]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="LogList" type="VBoxContainer" parent="MainHBox/RightColumn/LogPanel/LogVBox/LogScroll" unique_id=1149607972]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
+[node name="CalcPanel" type="PanelContainer" parent="MainHBox/RightColumn" unique_id=2131131855]
+layout_mode = 2
+
+[node name="CalcVBox" type="VBoxContainer" parent="MainHBox/RightColumn/CalcPanel" unique_id=1165986605]
+layout_mode = 2
+
+[node name="CalcDisplay" type="LineEdit" parent="MainHBox/RightColumn/CalcPanel/CalcVBox" unique_id=209059882]
+layout_mode = 2
+text = "0"
+alignment = 2
+editable = false
+
+[node name="CalcGrid" type="GridContainer" parent="MainHBox/RightColumn/CalcPanel/CalcVBox" unique_id=1721671480]
+layout_mode = 2
+columns = 4
+
+[node name="Btn7" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=286784689]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "7"
+
+[node name="Btn8" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=693028902]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "8"
+
+[node name="Btn9" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=1401302933]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "9"
+
+[node name="BtnDiv" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=144100658]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "/"
+
+[node name="Btn4" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=592126899]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "4"
+
+[node name="Btn5" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=414759005]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "5"
+
+[node name="Btn6" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=1223119271]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "6"
+
+[node name="BtnMul" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=531176826]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "*"
+
+[node name="Btn1" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=709206756]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "1"
+
+[node name="Btn2" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=707801208]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "2"
+
+[node name="Btn3" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=762834177]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "3"
+
+[node name="BtnSub" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=159765422]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="BtnC" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=687397419]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "C"
+
+[node name="Btn0" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=2059395427]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "0"
+
+[node name="BtnEq" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=1746987085]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "="
+
+[node name="BtnAdd" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGrid" unique_id=1514440874]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="CalcGoldLabel" type="Label" parent="MainHBox/RightColumn/CalcPanel/CalcVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Ваше золото: 1000"
+horizontal_alignment = 1
+
+[node name="BidButton" type="Button" parent="MainHBox/RightColumn/CalcPanel/CalcVBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Сделать ставку"

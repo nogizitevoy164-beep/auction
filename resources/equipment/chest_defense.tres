@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EquipmentData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment_data.gd" id="1"]
+[ext_resource type="Texture2D" path="res://icons/chest_defense.svg" id="2"]
+
+[resource]
+script = ExtResource("1")
+gear_class_id = "chest_defense"
+item_name = "Нагрудник защиты"
+cost = 5000
+size_x = 3
+size_y = 3
+rarity = 3
+type = 0
+quality = 3
+icon = ExtResource("2")

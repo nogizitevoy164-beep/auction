@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EquipmentData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment_data.gd" id="1"]
+[ext_resource type="Texture2D" path="res://icons/robe_magic.svg" id="2"]
+
+[resource]
+script = ExtResource("1")
+gear_class_id = "robe_magic"
+item_name = "Роба волшебства"
+cost = 25000
+size_x = 2
+size_y = 4
+rarity = 5
+type = 0
+quality = 5
+icon = ExtResource("2")
