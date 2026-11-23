@@ -7,6 +7,7 @@ extends Control
 ## Локальные ссылки (не зависят от глобального кэша классов).
 const PlayerDataS = preload("res://scripts/player_data.gd")
 const BotsControllerS = preload("res://scripts/bots_controller.gd")
+const SaveDataS = preload("res://scripts/save_data.gd")
 
 # ==================== ИГРОВОЕ ПОЛЕ ====================
 ## Сетка рисуется узлом GameField (scripts/game_field.gd):
@@ -16,6 +17,11 @@ const BotsControllerS = preload("res://scripts/bots_controller.gd")
 ## Пул набирается случайно по шансам выбранного поля
 ## (GameData.FIELD_TIERS) функцией _place_tier_items().
 var field_items: Array[Dictionary] = []
+var inventory: Array[Dictionary] = []
+var _save_state: Dictionary = {}
+var _inventory_list: VBoxContainer
+var _inventory_gold_label: Label
+var _auction_settled: bool = false
 
 # ==================== ВЫБОР ИГРОВОГО ПОЛЯ ====================
 ## Выбранное поле аукциона (GameData.FieldTier); -1 — пока не выбрано.
@@ -93,8 +99,10 @@ var _bot_rng := RandomNumberGenerator.new()
 func _ready() -> void:
 	_item_rng.randomize()
 	_setup_round_timer()
+	_save_state = SaveDataS.load_game()
 	_setup_players()
 	_init_placeholders()
+	_setup_inventory_panel()
 	_setup_field_selection()
 	_setup_calc()
 
@@ -111,6 +119,68 @@ func _init_placeholders() -> void:
 	set_field_name("—")
 	add_log("[Игра] Добро пожаловать на магический аукцион!")
 	add_log("[Игра] Выберите игровое поле для входа.")
+	_refresh_inventory()
+
+
+func _setup_inventory_panel() -> void:
+	var panel := PanelContainer.new()
+	panel.name = "InventoryPanel"
+	panel.custom_minimum_size = Vector2(280, 0)
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+	var header := Label.new()
+	header.text = "Склад выигранных предметов"
+	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	header.add_theme_font_size_override("font_size", 18)
+	box.add_child(header)
+	_inventory_gold_label = Label.new()
+	_inventory_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_inventory_gold_label)
+	_inventory_list = VBoxContainer.new()
+	box.add_child(_inventory_list)
+	$MainHBox/LeftColumn.add_child(panel)
+	_refresh_inventory()
+
+
+func _refresh_inventory() -> void:
+	if _inventory_list == null:
+		return
+	for child in _inventory_list.get_children():
+		child.queue_free()
+	_inventory_gold_label.text = "Монеты: %d" % players[0].gold
+	if inventory.is_empty():
+		var empty := Label.new()
+		empty.text = "Пока пусто"
+		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_inventory_list.add_child(empty)
+		return
+	for index: int in inventory.size():
+		var item: Dictionary = inventory[index]
+		var row := HBoxContainer.new()
+		var label := Label.new()
+		label.text = "%s — %d" % [item.get("title", "Предмет"), int(item.get("cost", 0))]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		row.add_child(label)
+		var sell := Button.new()
+		sell.text = "Продать %d" % SaveDataS.sell_price(item)
+		sell.pressed.connect(_sell_inventory_item.bind(index))
+		row.add_child(sell)
+		_inventory_list.add_child(row)
+
+
+func _sell_inventory_item(index: int) -> void:
+	if index < 0 or index >= inventory.size():
+		return
+	var item: Dictionary = inventory[index]
+	var price := SaveDataS.sell_price(item)
+	players[0].gold += price
+	inventory.remove_at(index)
+	SaveDataS.save_game(players[0].gold, inventory)
+	add_log("[Склад] Продан предмет «%s» за %d монет." % [item.get("title", "Предмет"), price])
+	_update_player_labels()
+	_refresh_tier_buttons()
+	_refresh_inventory()
 
 
 # ============================================================
@@ -182,6 +252,7 @@ func _on_tier_selected(tier: int) -> void:
 	auction_field_name = String(info["title"])
 	add_log("[Игра] Вы вошли на «%s» (вход от %d монет)." % [auction_field_name, min_gold])
 	_place_tier_items(int(info["lot_count"]))
+	_auction_settled = false
 	set_field_round(1)
 	add_log("[Игра] Раунд 1: местоположение предметов скрыто...")
 	add_log("[Игра] Стартовое золото: %d" % players[0].gold)
@@ -416,10 +487,44 @@ func _on_round_time_expired() -> void:
 func _advance_round() -> void:
 	if _field_round >= 5:
 		_round_timer.stop()
+		_settle_auction()
 		set_news("Аукцион завершён! Итоги подведены.")
 		add_log("[Игра] Раунд 5 завершён — аукцион окончен!")
 		return
 	set_field_round(_field_round + 1)
+
+
+func _settle_auction() -> void:
+	if _auction_settled:
+		return
+	_auction_settled = true
+	var winner := -1
+	var winning_bid := 0
+	for p: PlayerDataS in players:
+		if p.last_bid > winning_bid:
+			winner = p.id
+			winning_bid = p.last_bid
+	if winner != 1 or winning_bid <= 0:
+		add_log("[Игра] Лот выиграл %s. Ваши предметы не изменились." % _player_name(winner))
+		return
+	players[0].gold = maxi(players[0].gold - winning_bid, 0)
+	for item: Dictionary in field_items:
+		inventory.append({
+			"title": String(item.get("title", "Предмет")),
+			"cost": int(item.get("cost", 0)),
+			"size": "%dx%d" % [int(item.get("w", 1)), int(item.get("h", 1))],
+		})
+	SaveDataS.save_game(players[0].gold, inventory)
+	add_log("[Победа] Вы выиграли %d предмет(ов) за %d монет." % [field_items.size(), winning_bid])
+	_update_player_labels()
+	_refresh_inventory()
+
+
+func _player_name(player_id: int) -> String:
+	for p: PlayerDataS in players:
+		if p.id == player_id:
+			return p.player_name
+	return "никто"
 
 
 ## Все игроки поставили — новый раунд начинается, не дожидаясь таймера.
@@ -455,7 +560,11 @@ func _setup_players() -> void:
 	human.id = 1
 	human.player_name = "Вы"
 	human.is_bot = false
-	human.gold = 1000
+	human.gold = int(_save_state.get("gold", 1000))
+	inventory.clear()
+	for saved_item: Variant in _save_state.get("inventory", []):
+		if saved_item is Dictionary:
+			inventory.append(saved_item.duplicate(true))
 	human.avatar_path = "res://icons/player_1.svg"
 	players.append(human)
 	var bot_gold: Array[int] = [900, 1100, 1000]
