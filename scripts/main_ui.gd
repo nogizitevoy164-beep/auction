@@ -453,6 +453,7 @@ func set_field_round(value: int) -> void:
 	var prev_bid: int = players[0].last_bid
 	for p: PlayerDataS in players:
 		p.last_bid = 0
+		p.has_acted = false
 	_prefill_calc(prev_bid)
 	_update_player_labels()
 	_schedule_bot_bids()
@@ -575,7 +576,7 @@ func _player_name(player_id: int) -> String:
 ## Все игроки поставили — новый раунд начинается, не дожидаясь таймера.
 func _check_all_bid() -> void:
 	for p: PlayerDataS in players:
-		if p.last_bid <= 0:
+		if not p.has_acted:
 			return
 	add_log("[Игра] Все игроки сделали ставки — начинается раунд %d!" % [
 		_field_round + 1])
@@ -644,7 +645,10 @@ func _update_player_labels() -> void:
 			var previous_bid: int = int(_revealed_round_bids.get(p.id, 0))
 			bid_label.text = "Ставка: %d" % previous_bid if previous_bid > 0 else "Пас"
 		else:
-			bid_label.text = "Готов" if p.last_bid > 0 else "Ожидание"
+			if p.last_bid > 0:
+				bid_label.text = "Готов"
+			else:
+				bid_label.text = "Пас" if p.has_acted else "Ожидание"
 		_set_bid_frame(avatar, p.last_bid > 0)
 	calc_gold_label.text = "Ваше золото: %d" % players[0].gold
 
@@ -674,17 +678,18 @@ func _schedule_bot_bids() -> void:
 			continue
 		p.last_bid = 0
 		p.last_estimate = estimate
-		var delay: float = _bot_rng.randf_range(3.0, 35.0)
+		var delay: float = _bot_rng.randf_range(0.5, 5.0)
 		get_tree().create_timer(delay).timeout.connect(_bot_place_bid.bind(p, _field_round))
 	_update_player_labels()
 
 
 ## Ставка конкретного бота (если раунд к моменту тика не сменился).
 func _bot_place_bid(bot: PlayerDataS, round_at_schedule: int) -> void:
-	if _auction_finished or round_at_schedule != _field_round or bot.last_bid > 0:
+	if _auction_finished or round_at_schedule != _field_round or bot.has_acted:
 		return
 	bot.last_bid = BotsControllerS.bot_bid(
 			bot.last_estimate, _field_round, bot.gold, bot.aggression, _bot_rng)
+	bot.has_acted = true
 	if bot.last_bid > 0:
 		add_log("[%s] ставка: %d монет (оценка лота %d)" % [
 			bot.player_name, bot.last_bid, bot.last_estimate])
@@ -793,13 +798,21 @@ func _on_bid_button_pressed() -> void:
 		add_log("[Игра] Вы уже сделали ставку в этом раунде")
 		return
 	var value := _calc_result()
-	if value <= 0:
-		add_log("[Игра] Наберите сумму ставки в калькуляторе (например 150)")
+	if value < 0:
+		add_log("[Игра] Введите ставку или оставьте 0 для паса")
+		return
+	if value == 0:
+		player.last_bid = 0
+		player.has_acted = true
+		add_log("[Вы] пас в этом раунде")
+		_update_player_labels()
+		_check_all_bid()
 		return
 	var amount: int = clampi(value, 1, player.gold)
 	if amount < value:
 		add_log("[Игра] Ставка урезана до вашего золота: %d" % amount)
 	player.last_bid = amount
+	player.has_acted = true
 	add_log("[Вы] ставка: %d монет" % amount)
 	_update_player_labels()
 	if _check_early_victory(player.id):
