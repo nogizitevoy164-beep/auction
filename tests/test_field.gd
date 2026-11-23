@@ -22,17 +22,17 @@ func _initialize() -> void:
 	gf.size = Vector2(900, 600)
 	gf._recalculate()
 
-	# Квадратность: клетка = ширина / 30 колонок.
-	check(absf(gf.cell_size() - 30.0) < 0.001,
-			"клетка 900/30 = 30.0px, квадрат 30×30")
-	# Ряды заполняют всю высоту.
-	check(gf.rows_visible() == 20, "600px / 30px = 20 рядов")
+	# Квадратность: клетка = ширина / 20 колонок.
+	check(absf(gf.cell_size() - 45.0) < 0.001,
+			"клетка 900/20 = 45.0px, квадрат 45×45")
+	# До загрузки предметов ряды заполняют доступную высоту.
+	check(gf.rows_visible() == 13, "600px / 45px = 13 рядов")
 
 	# Другой размер — клетки снова квадратные.
 	gf.size = Vector2(600, 450)
 	gf._recalculate()
-	check(absf(gf.cell_size() - 20.0) < 0.001, "клетка 600/30 = 20.0px, квадрат 20×20")
-	check(gf.rows_visible() == 22, "450px / 20px = 22 ряда (округление вниз)")
+	check(absf(gf.cell_size() - 30.0) < 0.001, "клетка 600/20 = 30.0px, квадрат 30×30")
+	check(gf.rows_visible() == 15, "450px / 30px = 15 рядов (округление вниз)")
 
 	# Предметы w×h в клетках.
 	gf.set_items([
@@ -51,10 +51,10 @@ func _initialize() -> void:
 	gf.reveal_for_round(3)
 	check(gf.revealed_count() == 54, "раунд 3: накоплено 54 открытых клетки")
 	gf.reveal_for_round(4)
-	check(gf.revealed_count() == 84, "раунд 4: накоплено 84 открытых клетки")
+	check(gf.revealed_count() == 80, "раунд 4: поле из 80 клеток раскрыто полностью")
 	gf.reveal_for_round(5)
 	check(gf.current_round == 5, "раунд ограничен значением 5")
-	check(gf.revealed_count() == 120, "к финалу накоплено 120 открытых клеток")
+	check(gf.revealed_count() == 80, "к финалу динамическое поле раскрыто полностью")
 	check(gf.is_item_fully_revealed(0) or not gf.is_item_fully_revealed(0),
 			"признак полного раскрытия предмета вычисляется")
 	gf.reset_reveal()
@@ -82,7 +82,7 @@ func _initialize() -> void:
 	for id: String in GameDataS.SELLABLE_ITEMS:
 		var info: Dictionary = GameDataS.SELLABLE_ITEMS[id]
 		var s: Vector2i = info["size"]
-		if pack_col + s.x > 30:
+		if pack_col + s.x > 20:
 			pack_col = 0
 			shelf_y += shelf_h + 1
 			shelf_h = 0
@@ -99,7 +99,7 @@ func _initialize() -> void:
 	gf.size = Vector2(1234, 500)
 	gf._recalculate()
 	var cell: float = gf.cell_size()
-	check(absf(cell * 30.0 - 1234.0) < 0.01, "30 клеток точно заполняют ширину")
+	check(absf(cell * 20.0 - 1234.0) < 0.01, "20 клеток точно заполняют ширину")
 	check(absf(cell - gf.cell_size()) < 0.001, "ширина клетки == высоте клетки")
 
 	if failures == 0:

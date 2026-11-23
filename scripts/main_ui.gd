@@ -8,6 +8,7 @@ extends Control
 const PlayerDataS = preload("res://scripts/player_data.gd")
 const BotsControllerS = preload("res://scripts/bots_controller.gd")
 const SaveDataS = preload("res://scripts/save_data.gd")
+const GameFieldS = preload("res://scripts/game_field.gd")
 
 # ==================== ИГРОВОЕ ПОЛЕ ====================
 ## Сетка рисуется узлом GameField (scripts/game_field.gd):
@@ -389,7 +390,7 @@ func _place_tier_items(count: int) -> void:
 	for info: Dictionary in picked:
 		var item_size: Vector2i = info["size"]
 		# Предмет не влезает по ширине — переносим на новую полку.
-		if col + item_size.x > 30:
+		if col + item_size.x > GameFieldS.FIELD_COLS:
 			col = 0
 			shelf_y += shelf_h + 1
 			shelf_h = 0
@@ -412,9 +413,9 @@ func _place_tier_items(count: int) -> void:
 ## Добавляет предмет в пул: размер w × h клеток, угол — (row, col).
 func add_field_item(row: int, col: int, w: int, h: int, title: String,
 		color: Color = Color(0.60, 0.60, 0.70)) -> void:
-	w = clampi(w, 1, 30)
+	w = clampi(w, 1, GameFieldS.FIELD_COLS)
 	h = maxi(h, 1)
-	col = clampi(col, 0, 30 - w)
+	col = clampi(col, 0, GameFieldS.FIELD_COLS - w)
 	field_items.append({"row": row, "col": col, "w": w, "h": h, "title": title, "color": color})
 	rebuild_field()
 

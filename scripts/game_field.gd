@@ -1,6 +1,6 @@
 class_name GameField
 extends Control
-## Игровое поле аукциона — сетка строго квадратных клеток (30 колонок).
+## Игровое поле аукциона — сетка строго квадратных клеток (20 колонок).
 ##
 ## СОКРОВИЩА СКРЫТЫ: изначально игрок видит только закрытую сетку лота
 ## и не знает, какие предметы на ней лежат и сколько клеток занимают.
@@ -14,7 +14,7 @@ extends Control
 
 signal cell_clicked(row: int, col: int)
 
-const FIELD_COLS: int = 30          # клеток по оси X (фиксировано)
+const FIELD_COLS: int = 20          # клеток по оси X (фиксировано)
 const MIN_ROWS: int = 4             # минимум рядов, если поле низкое
 
 ## Сколько НОВЫХ клеток вскрывается в начале каждого раунда.
@@ -55,7 +55,11 @@ func _recalculate() -> void:
 		_cell = size.x / float(FIELD_COLS)
 	else:
 		_cell = 40.0
-	_rows = maxi(MIN_ROWS, int(floor(size.y / _cell)))
+	var visible_rows := int(floor(size.y / _cell))
+	var required_rows := 0
+	for item: Dictionary in items:
+		required_rows = maxi(required_rows, int(item.get("row", 0)) + int(item.get("h", 1)))
+	_rows = maxi(MIN_ROWS, required_rows if not items.is_empty() else visible_rows)
 
 
 ## Сторона квадратной клетки (ширина == высота).
@@ -72,6 +76,7 @@ func rows_visible() -> int:
 func set_items(new_items: Array) -> void:
 	items = new_items.duplicate(true)
 	_rebuild_occupancy()
+	_recalculate()
 	queue_redraw()
 
 
