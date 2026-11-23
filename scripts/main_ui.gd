@@ -23,6 +23,9 @@ var _save_state: Dictionary = {}
 var _inventory_list: VBoxContainer
 var _inventory_gold_label: Label
 var _auction_settled: bool = false
+## Ставки предыдущего завершённого раунда, доступные для отображения.
+var _revealed_round_bids: Dictionary = {}
+var _round_bids_visible: bool = false
 
 # ==================== ВЫБОР ИГРОВОГО ПОЛЯ ====================
 ## Выбранное поле аукциона (GameData.FieldTier); -1 — пока не выбрано.
@@ -254,6 +257,8 @@ func _on_tier_selected(tier: int) -> void:
 	add_log("[Игра] Вы вошли на «%s» (вход от %d монет)." % [auction_field_name, min_gold])
 	_place_tier_items(int(info["lot_count"]))
 	_auction_settled = false
+	_revealed_round_bids = {}
+	_round_bids_visible = false
 	set_field_round(1)
 	add_log("[Игра] Раунд 1: местоположение предметов скрыто...")
 	add_log("[Игра] Стартовое золото: %d" % players[0].gold)
@@ -441,6 +446,7 @@ func set_field_round(value: int) -> void:
 	for p: PlayerDataS in players:
 		p.last_bid = 0
 	_prefill_calc(prev_bid)
+	_update_player_labels()
 	_schedule_bot_bids()
 
 
@@ -486,6 +492,7 @@ func _on_round_time_expired() -> void:
 ## Завершает текущий раунд: досрочно (все сделали ставки) или по таймеру.
 ## После 5-го раунда аукцион завершается.
 func _advance_round() -> void:
+	_reveal_round_bids()
 	if _field_round >= 5:
 		_round_timer.stop()
 		_settle_auction()
@@ -493,6 +500,16 @@ func _advance_round() -> void:
 		add_log("[Игра] Раунд 5 завершён — аукцион окончен!")
 		return
 	set_field_round(_field_round + 1)
+
+
+func _reveal_round_bids() -> void:
+	if _round_bids_visible:
+		return
+	_revealed_round_bids = {}
+	for p: PlayerDataS in players:
+		_revealed_round_bids[p.id] = p.last_bid
+	_round_bids_visible = true
+	_update_player_labels()
 
 
 func _settle_auction() -> void:
@@ -580,8 +597,9 @@ func _setup_players() -> void:
 		players.append(bot)
 	for i: int in players.size():
 		var row: HBoxContainer = players_column.get_node(NodePath("PlayerRow%d" % i))
-		var avatar: TextureRect = row.get_node(NodePath("Avatar"))
-		avatar.texture = load(players[i].avatar_path)
+		var avatar: PanelContainer = row.get_node(NodePath("Avatar"))
+		var avatar_icon: TextureRect = avatar.get_node(NodePath("Icon"))
+		avatar_icon.texture = load(players[i].avatar_path)
 		var name_label: Label = row.get_node(NodePath("Info/NameLabel"))
 		name_label.text = players[i].player_name
 	_update_player_labels()
@@ -593,9 +611,30 @@ func _update_player_labels() -> void:
 	for i: int in players.size():
 		var row: HBoxContainer = players_column.get_node(NodePath("PlayerRow%d" % i))
 		var bid_label: Label = row.get_node(NodePath("Info/BidLabel"))
+		var avatar: PanelContainer = row.get_node(NodePath("Avatar"))
 		var p: PlayerDataS = players[i]
-		bid_label.text = str(p.last_bid) if p.last_bid > 0 else "—"
+		if _round_bids_visible:
+			var previous_bid: int = int(_revealed_round_bids.get(p.id, 0))
+			bid_label.text = "Ставка: %d" % previous_bid if previous_bid > 0 else "Пас"
+		else:
+			bid_label.text = "Готов" if p.last_bid > 0 else "Ожидание"
+		_set_bid_frame(avatar, p.last_bid > 0)
 	calc_gold_label.text = "Ваше золото: %d" % players[0].gold
+
+
+func _set_bid_frame(avatar: PanelContainer, active: bool) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.18, 0.14, 1.0)
+	style.border_width_left = 3 if active else 0
+	style.border_width_top = 3 if active else 0
+	style.border_width_right = 3 if active else 0
+	style.border_width_bottom = 3 if active else 0
+	style.border_color = Color(0.20, 0.95, 0.35, 1.0)
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	avatar.add_theme_stylebox_override("panel", style)
 
 
 ## Боты делают ставки в течение раунда: оценивают лот по открытым
