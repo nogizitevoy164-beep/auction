@@ -26,6 +26,9 @@ var _auction_settled: bool = false
 ## Ставки предыдущего завершённого раунда, доступные для отображения.
 var _revealed_round_bids: Dictionary = {}
 var _round_bids_visible: bool = false
+var _round_finished: bool = false
+var _auction_finished: bool = false
+const ROUND_PROTECTION: Array[float] = [2.0, 1.5, 1.3, 1.1, 1.0]
 
 # ==================== ВЫБОР ИГРОВОГО ПОЛЯ ====================
 ## Выбранное поле аукциона (GameData.FieldTier); -1 — пока не выбрано.
@@ -257,6 +260,7 @@ func _on_tier_selected(tier: int) -> void:
 	add_log("[Игра] Вы вошли на «%s» (вход от %d монет)." % [auction_field_name, min_gold])
 	_place_tier_items(int(info["lot_count"]))
 	_auction_settled = false
+	_auction_finished = false
 	_revealed_round_bids = {}
 	_round_bids_visible = false
 	set_field_round(1)
@@ -436,6 +440,7 @@ func set_field_name(value: String) -> void:
 ## показывает коэффициент защиты ставки. Таймер раунда перезапускается.
 func set_field_round(value: int) -> void:
 	_field_round = clampi(value, 1, 5)
+	_round_finished = false
 	game_field.reveal_for_round(_field_round)
 	update_round_info_from_state(auction_field_name, _field_round)
 	set_news("Раунд %d — смотрите на поле и делайте ставки!" % _field_round)
@@ -492,6 +497,9 @@ func _on_round_time_expired() -> void:
 ## Завершает текущий раунд: досрочно (все сделали ставки) или по таймеру.
 ## После 5-го раунда аукцион завершается.
 func _advance_round() -> void:
+	if _round_finished or _auction_finished:
+		return
+	_round_finished = true
 	_reveal_round_bids()
 	if _field_round >= 5:
 		_round_timer.stop()
@@ -503,8 +511,6 @@ func _advance_round() -> void:
 
 
 func _reveal_round_bids() -> void:
-	if _round_bids_visible:
-		return
 	_revealed_round_bids = {}
 	for p: PlayerDataS in players:
 		_revealed_round_bids[p.id] = p.last_bid
@@ -516,6 +522,7 @@ func _settle_auction() -> void:
 	if _auction_settled:
 		return
 	_auction_settled = true
+	_auction_finished = true
 	var winner := -1
 	var winning_bid := 0
 	for p: PlayerDataS in players:
@@ -654,7 +661,7 @@ func _schedule_bot_bids() -> void:
 
 ## Ставка конкретного бота (если раунд к моменту тика не сменился).
 func _bot_place_bid(bot: PlayerDataS, round_at_schedule: int) -> void:
-	if round_at_schedule != _field_round or bot.last_bid > 0:
+	if _auction_finished or round_at_schedule != _field_round or bot.last_bid > 0:
 		return
 	bot.last_bid = BotsControllerS.bot_bid(
 			bot.last_estimate, _field_round, bot.gold, bot.aggression, _bot_rng)
@@ -664,7 +671,36 @@ func _bot_place_bid(bot: PlayerDataS, round_at_schedule: int) -> void:
 	else:
 		add_log("[%s] пасует в этом раунде" % bot.player_name)
 	_update_player_labels()
+	if _check_early_victory(bot.id):
+		return
 	_check_all_bid()
+
+
+func _check_early_victory(player_id: int) -> bool:
+	if _auction_finished or _field_round < 1 or _field_round > ROUND_PROTECTION.size():
+		return false
+	var player_bid := 0
+	var highest_other := 0
+	for p: PlayerDataS in players:
+		if p.id == player_id:
+			player_bid = p.last_bid
+		elif p.last_bid > highest_other:
+			highest_other = p.last_bid
+	if player_bid <= 0 or highest_other <= 0:
+		return false
+	var threshold := int(ceil(float(highest_other) * ROUND_PROTECTION[_field_round - 1]))
+	if player_bid <= threshold:
+		return false
+	_round_finished = true
+	_reveal_round_bids()
+	_round_timer.stop()
+	_auction_finished = true
+	set_news("Досрочная победа — ставка превысила защитный порог!")
+	add_log("[Игра] %s досрочно выиграл аукцион: %d > %d × %.1f." % [
+		_player_name(player_id), player_bid, highest_other,
+		ROUND_PROTECTION[_field_round - 1]])
+	_settle_auction()
+	return true
 
 
 # ============================================================
@@ -729,6 +765,9 @@ func _calc_result() -> int:
 ## ставкой текущего игрока. Повторная ставка в раунде запрещена.
 func _on_bid_button_pressed() -> void:
 	var player: PlayerDataS = players[0]
+	if _auction_finished:
+		add_log("[Игра] Аукцион уже завершён")
+		return
 	if player.last_bid > 0:
 		add_log("[Игра] Вы уже сделали ставку в этом раунде")
 		return
@@ -742,4 +781,6 @@ func _on_bid_button_pressed() -> void:
 	player.last_bid = amount
 	add_log("[Вы] ставка: %d монет" % amount)
 	_update_player_labels()
+	if _check_early_victory(player.id):
+		return
 	_check_all_bid()
