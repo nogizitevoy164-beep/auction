@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://qopfi71fgysd"
+
+[deps]
+
+files=["res://data/magic_auction_items.Размер.translation", "res://data/magic_auction_items.Качество.translation", "res://data/magic_auction_items.Стоимость (монет).translation", "res://data/magic_auction_items.Начальный аукцион (%).translation", "res://data/magic_auction_items.Средний аукцион (%).translation", "res://data/magic_auction_items.Элитный аукцион (%).translation"]
+
+source_file="res://data/magic_auction_items.csv"
+dest_files=["res://data/magic_auction_items.Размер.translation", "res://data/magic_auction_items.Качество.translation", "res://data/magic_auction_items.Стоимость (монет).translation", "res://data/magic_auction_items.Начальный аукцион (%).translation", "res://data/magic_auction_items.Средний аукцион (%).translation", "res://data/magic_auction_items.Элитный аукцион (%).translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
