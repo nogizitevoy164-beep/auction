@@ -93,6 +93,7 @@ const EQUIP_SLOT_LABELS: Dictionary = {
 
 ## Текущее выражение калькулятора (набирается кнопками).
 var calc_expression: String = ""
+var _calc_prefilled: bool = false
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -545,7 +546,7 @@ func _settle_auction() -> void:
 			"size": "%dx%d" % [int(item.get("w", 1)), int(item.get("h", 1))],
 		})
 	SaveDataS.save_game(players[0].gold, inventory)
-	add_log("[Победа] Вы выиграли %d предмет(ов) за %d монет." % [field_items.size(), winning_bid])
+	add_log("[Победа] Вы выиграли %d предмет(ов)." % field_items.size())
 	_update_player_labels()
 	_refresh_inventory()
 
@@ -586,6 +587,7 @@ func _check_all_bid() -> void:
 ## Подставляет предыдущую ставку игрока в калькулятор.
 func _prefill_calc(prev_bid: int) -> void:
 	calc_expression = str(maxi(prev_bid, 0))
+	_calc_prefilled = true
 	calc_display.text = calc_expression
 
 
@@ -691,8 +693,7 @@ func _bot_place_bid(bot: PlayerDataS, round_at_schedule: int) -> void:
 			bot.last_estimate, _field_round, bot.gold, bot.aggression, _bot_rng)
 	bot.has_acted = true
 	if bot.last_bid > 0:
-		add_log("[%s] ставка: %d монет (оценка лота %d)" % [
-			bot.player_name, bot.last_bid, bot.last_estimate])
+		add_log("[%s] сделал ставку." % bot.player_name)
 	else:
 		add_log("[%s] пасует в этом раунде" % bot.player_name)
 	_update_player_labels()
@@ -721,9 +722,7 @@ func _check_early_victory(player_id: int) -> bool:
 	_round_timer.stop()
 	_auction_finished = true
 	set_news("Досрочная победа — ставка превысила защитный порог!")
-	add_log("[Игра] %s досрочно выиграл аукцион: %d > %d × %.1f." % [
-		_player_name(player_id), player_bid, highest_other,
-		ROUND_PROTECTION[_field_round - 1]])
+	add_log("[Игра] %s досрочно выиграл аукцион." % _player_name(player_id))
 	_settle_auction()
 	_show_field_selection_in_game_area()
 	return true
@@ -743,10 +742,14 @@ func _on_calc_button_pressed(symbol: String) -> void:
 	match symbol:
 		"C":
 			calc_expression = ""
+			_calc_prefilled = false
 			calc_display.text = "0"
 		"=":
 			_calc_evaluate()
 		_:
+			if _calc_prefilled:
+				calc_expression = ""
+				_calc_prefilled = false
 			calc_expression += symbol
 			calc_display.text = calc_expression
 
@@ -810,10 +813,10 @@ func _on_bid_button_pressed() -> void:
 		return
 	var amount: int = clampi(value, 1, player.gold)
 	if amount < value:
-		add_log("[Игра] Ставка урезана до вашего золота: %d" % amount)
+		add_log("[Игра] Ставка ограничена доступным балансом.")
 	player.last_bid = amount
 	player.has_acted = true
-	add_log("[Вы] ставка: %d монет" % amount)
+	add_log("[Вы] сделал ставку.")
 	_update_player_labels()
 	if _check_early_victory(player.id):
 		return
