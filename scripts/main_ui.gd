@@ -80,6 +80,8 @@ const EQUIP_SLOT_LABELS: Dictionary = {
 @onready var round_timer_label: Label = $MainHBox/CenterColumn/RoundInfoPanel/RoundInfoHBox/RoundTimerLabel
 @onready var round_defense_label: Label = $MainHBox/CenterColumn/RoundInfoPanel/RoundInfoHBox/DefenseLabel
 @onready var game_field = $MainHBox/CenterColumn/FieldHBox/GameFieldPanel/GameField
+@onready var game_field_panel: PanelContainer = $MainHBox/CenterColumn/FieldHBox/GameFieldPanel
+@onready var field_hbox: HBoxContainer = $MainHBox/CenterColumn/FieldHBox
 @onready var players_column: VBoxContainer = $MainHBox/CenterColumn/FieldHBox/PlayersColumn
 @onready var log_scroll: ScrollContainer = $MainHBox/RightColumn/LogPanel/LogVBox/LogScroll
 @onready var log_list: VBoxContainer = $MainHBox/RightColumn/LogPanel/LogVBox/LogScroll/LogList
@@ -253,6 +255,7 @@ func _on_tier_selected(tier: int) -> void:
 	current_tier = tier
 	_tier_overlay.visible = false
 	main_hbox.visible = true
+	game_field_panel.visible = true
 	# Боты тоже вошли на это поле — их золото не ниже порога входа.
 	for i: int in range(1, players.size()):
 		players[i].gold = maxi(players[i].gold, min_gold)
@@ -506,6 +509,7 @@ func _advance_round() -> void:
 		_settle_auction()
 		set_news("Аукцион завершён! Итоги подведены.")
 		add_log("[Игра] Раунд 5 завершён — аукцион окончен!")
+		_show_field_selection_in_game_area()
 		return
 	set_field_round(_field_round + 1)
 
@@ -543,6 +547,22 @@ func _settle_auction() -> void:
 	add_log("[Победа] Вы выиграли %d предмет(ов) за %d монет." % [field_items.size(), winning_bid])
 	_update_player_labels()
 	_refresh_inventory()
+
+
+func _show_field_selection_in_game_area() -> void:
+	_round_timer.stop()
+	game_field_panel.visible = false
+	main_hbox.visible = true
+	if _tier_overlay.get_parent() != field_hbox:
+		_tier_overlay.get_parent().remove_child(_tier_overlay)
+		field_hbox.add_child(_tier_overlay)
+	_tier_overlay.layout_mode = 2
+	_tier_overlay.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tier_overlay.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_tier_overlay.custom_minimum_size = Vector2.ZERO
+	_tier_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_tier_overlay.visible = true
+	_refresh_tier_buttons()
 
 
 func _player_name(player_id: int) -> String:
@@ -700,6 +720,7 @@ func _check_early_victory(player_id: int) -> bool:
 		_player_name(player_id), player_bid, highest_other,
 		ROUND_PROTECTION[_field_round - 1]])
 	_settle_auction()
+	_show_field_selection_in_game_area()
 	return true
 
 
