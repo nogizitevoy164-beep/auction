@@ -3,11 +3,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { WebSocketServer } = require('ws');
+const { hashPassword, verifyPassword } = require('./auth');
+const { createPool } = require('./db');
 
 const PORT = Number(process.env.PORT || 8080);
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dev-admin-key';
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = process.env.DATA_FILE || path.join(DATA_DIR, 'runtime.json');
+const postgres = createPool();
 
 const seed = {
   nextPlayerId: 1,
@@ -148,13 +151,14 @@ async function handle(req, res) {
       const login = String(data.login || '').trim();
       if (login.length < 3) return error(res, 400, 'Логин должен содержать минимум 3 символа');
       if (state.players.some((p) => p.login.toLowerCase() === login.toLowerCase())) return error(res, 409, 'Игрок уже существует');
-      const player = { id: state.nextPlayerId++, login, coins: 1000, reservedCoins: 0, inventory: [], equipment: {}, listings: [], castle: null, potions: [] };
+      const credentials = hashPassword(String(data.password || `guest:${login}`));
+      const player = { id: state.nextPlayerId++, login, passwordSalt: credentials.salt, passwordHash: credentials.hash, coins: 1000, reservedCoins: 0, inventory: [], equipment: {}, listings: [], castle: null, potions: [] };
       const token = id(); state.players.push(player); state.tokens[token] = player.id; saveState();
       return json(res, 201, { token, player: publicPlayer(player) });
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/auth/login') {
       const data = await body(req); const player = state.players.find((p) => p.login === data.login);
-      if (!player) return error(res, 401, 'Неверные данные входа');
+      if (!player || !verifyPassword(String(data.password || `guest:${data.login}`), { salt: player.passwordSalt, hash: player.passwordHash })) return error(res, 401, 'Неверные данные входа');
       const token = id(); state.tokens[token] = player.id; saveState(); return json(res, 200, { token, player: publicPlayer(player) });
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/catalog/items') return json(res, 200, { items: state.itemDefinitions });
