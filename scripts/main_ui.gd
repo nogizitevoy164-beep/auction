@@ -843,17 +843,16 @@ func _list_inventory_item_on_server(index: int, price_input: LineEdit) -> void:
 # ============================================================
 #  ВЫБОР ИГРОВОГО ПОЛЯ (начальный / средний / элитный)
 # ============================================================
-## В начале игры вместо игрового поля показывается экран выбора:
+## В начале игры в центральной области вместо игрового поля показывается экран выбора:
 ## три поля с порогом входа по золоту (1000 / 10 000 / 100 000).
 func _setup_field_selection() -> void:
-	main_hbox.visible = false
 	_tier_overlay = PanelContainer.new()
 	_tier_overlay.name = "TierSelection"
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.09, 0.08, 0.12)
 	_tier_overlay.add_theme_stylebox_override("panel", sb)
-	_tier_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(_tier_overlay)
+	_tier_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	game_field.add_child(_tier_overlay)
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_tier_overlay.add_child(center)
@@ -870,11 +869,16 @@ func _setup_field_selection() -> void:
 	vbox.add_child(_tier_gold_label)
 	for tier: int in [GameData.FieldTier.STARTER, GameData.FieldTier.MID, GameData.FieldTier.ELITE]:
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(520, 72)
+		btn.custom_minimum_size = Vector2(420, 68)
 		btn.pressed.connect(_on_tier_selected.bind(tier))
 		vbox.add_child(btn)
 		_tier_buttons[tier] = btn
 	_refresh_tier_buttons()
+	main_hbox.visible = true
+	round_info_panel.visible = true
+	field_hbox.visible = true
+	game_field_panel.visible = true
+	_show_central_view("auction")
 
 
 ## Обновляет доступность кнопок полей по текущему золоту игрока.
@@ -903,6 +907,7 @@ func _on_tier_selected(tier: int) -> void:
 	current_tier = tier
 	_tier_overlay.visible = false
 	main_hbox.visible = true
+	game_field.visible = true
 	game_field_panel.visible = true
 	_show_central_view("auction")
 	# Боты тоже вошли на это поле — их золото не ниже порога входа.
@@ -1208,16 +1213,11 @@ func _settle_auction() -> void:
 
 func _show_field_selection_in_game_area() -> void:
 	_round_timer.stop()
-	game_field_panel.visible = false
 	main_hbox.visible = true
-	if _tier_overlay.get_parent() != field_hbox:
-		_tier_overlay.get_parent().remove_child(_tier_overlay)
-		field_hbox.add_child(_tier_overlay)
-	_tier_overlay.layout_mode = 2
-	_tier_overlay.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tier_overlay.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_tier_overlay.custom_minimum_size = Vector2.ZERO
-	_tier_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	round_info_panel.visible = true
+	field_hbox.visible = true
+	game_field_panel.visible = true
+	game_field.visible = true
 	_tier_overlay.visible = true
 	_refresh_tier_buttons()
 
