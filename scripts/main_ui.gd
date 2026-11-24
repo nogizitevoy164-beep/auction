@@ -119,6 +119,8 @@ var _matchmaking_timer: Timer
 var _matchmaking_tier: int = -1
 var _matchmaking_status_label: Label
 var _matchmaking_active: bool = false
+var _online_room_id: String = ""
+var _online_sync_timer: Timer
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -149,6 +151,11 @@ func _ready() -> void:
 	_matchmaking_timer.one_shot = false
 	_matchmaking_timer.timeout.connect(_poll_matchmaking)
 	add_child(_matchmaking_timer)
+	_online_sync_timer = Timer.new()
+	_online_sync_timer.wait_time = 1.0
+	_online_sync_timer.one_shot = false
+	_online_sync_timer.timeout.connect(_poll_online_room)
+	add_child(_online_sync_timer)
 	call_deferred("_sync_with_server")
 
 
@@ -1213,6 +1220,7 @@ func _show_matchmaking_view(info: Dictionary) -> void:
 		if result.get("ok", false):
 			_update_matchmaking_status(result.get("data", {}))
 			if String(result.get("data", {}).get("status", "")) == "started":
+				_online_room_id = String(result.get("data", {}).get("roomId", ""))
 				_start_auction_after_matchmaking()
 				return
 		else:
@@ -1239,6 +1247,7 @@ func _poll_matchmaking() -> void:
 	var data: Dictionary = result.get("data", {})
 	_update_matchmaking_status(data)
 	if bool(data.get("ready", false)) or String(data.get("status", "")) == "started":
+		_online_room_id = String(data.get("roomId", ""))
 		_start_auction_after_matchmaking()
 
 
@@ -1249,6 +1258,7 @@ func _skip_matchmaking() -> void:
 		var result: Dictionary = await _server_client.skip_matchmaking(_matchmaking_tier)
 		if result.get("ok", false):
 			var data: Dictionary = result.get("data", {})
+			_online_room_id = String(data.get("roomId", ""))
 			add_log("[Игра] Поиск пропущен: игроков %d, ботов %d." % [int(data.get("humanPlayers", 1)), int(data.get("bots", 3))])
 		else:
 			add_log("[Игра] Поиск пропущен, свободные места займут боты.")
@@ -1260,6 +1270,9 @@ func _start_auction_after_matchmaking() -> void:
 		return
 	_matchmaking_active = false
 	_matchmaking_timer.stop()
+	if not _online_room_id.is_empty() and _server_connected:
+		_start_online_auction()
+		return
 	var info: Dictionary = GameData.FIELD_TIERS[_matchmaking_tier]
 	_show_central_view("auction")
 	_round_timer.stop()
@@ -1274,6 +1287,82 @@ func _start_auction_after_matchmaking() -> void:
 	add_log("[Игра] Раунд 1: местоположение предметов скрыто...")
 	add_log("[Игра] Стартовое золото: %d" % players[0].gold)
 	_update_player_labels()
+
+
+func _start_online_auction() -> void:
+	var response: Dictionary = await _server_client.get_auction_room(_online_room_id)
+	if not response.get("ok", false):
+		_online_room_id = ""
+		add_log("[Игра] Общая комната недоступна — запускается локальный режим.")
+		_start_auction_after_matchmaking()
+		return
+	var snapshot: Dictionary = response.get("data", {})
+	var info: Dictionary = GameData.FIELD_TIERS[_matchmaking_tier]
+	_show_central_view("auction")
+	round_info_panel.visible = true
+	field_hbox.visible = true
+	game_field.visible = true
+	game_field_panel.visible = true
+	auction_field_name = String(info["title"])
+	_place_tier_items(int(info["lot_count"]), int(snapshot.get("fieldSeed", 0)))
+	_auction_settled = false
+	_auction_finished = false
+	_apply_online_room_snapshot(snapshot)
+	if not _online_room_id.is_empty():
+		_round_timer.start()
+		_online_sync_timer.start()
+	add_log("[Игра] Вы подключены к общей онлайн-комнате.")
+
+
+func _poll_online_room() -> void:
+	if _online_room_id.is_empty() or not _server_connected:
+		return
+	var response: Dictionary = await _server_client.get_auction_room(_online_room_id)
+	if response.get("ok", false):
+		_apply_online_room_snapshot(response.get("data", {}))
+
+
+func _apply_online_room_snapshot(snapshot: Dictionary) -> void:
+	var remote_players: Array = snapshot.get("players", [])
+	if remote_players.is_empty():
+		return
+	var previous_local := players[0] if not players.is_empty() else null
+	var rebuilt: Array[PlayerDataS] = []
+	var ordered: Array = remote_players.duplicate()
+	ordered.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("id", 0)) == _server_player_id
+	)
+	for entry: Dictionary in ordered:
+		var p := PlayerDataS.new()
+		p.id = int(entry.get("id", 0))
+		p.player_name = "Вы" if p.id == _server_player_id else String(entry.get("displayName", "Игрок"))
+		p.is_bot = bool(entry.get("isBot", false))
+		p.gold = int(entry.get("coins", 0))
+		p.avatar_path = "res://icons/player_1.svg" if p.id == _server_player_id else "res://icons/player_%d.svg" % (mini(rebuilt.size() + 2, 4))
+		p.has_acted = bool(entry.get("hasActed", false))
+		p.last_bid = int(entry.get("bid", 0))
+		rebuilt.append(p)
+	players = rebuilt
+	_field_round = clampi(int(snapshot.get("round", 1)), 1, 5)
+	var previous_bids: Dictionary = snapshot.get("previousBids", {})
+	_revealed_round_bids = {}
+	for key: Variant in previous_bids:
+		_revealed_round_bids[int(key)] = int(previous_bids[key])
+	_round_bids_visible = String(snapshot.get("status", "active")) == "finished" or not previous_bids.is_empty()
+	update_round_info_from_state(auction_field_name, _field_round)
+	if game_field.current_round != _field_round:
+		game_field.reveal_for_round(_field_round, int(snapshot.get("fieldSeed", -1)) if not _online_room_id.is_empty() else -1)
+	var remaining := maxi(int((int(snapshot.get("roundEndsAt", 0)) - int(snapshot.get("serverNow", Time.get_unix_time_from_system() * 1000))) / 1000), 0)
+	round_time_left = remaining
+	_update_round_timer_label()
+	_update_player_labels()
+	if String(snapshot.get("status", "active")) == "finished":
+		_online_sync_timer.stop()
+		_auction_finished = true
+		if not _auction_settled:
+			_settle_auction()
+		_show_field_selection_in_game_area()
+		_online_room_id = ""
 
 
 func set_character_name(value: String) -> void:
@@ -1384,8 +1473,12 @@ func rebuild_field() -> void:
 ## цвет клетки = цвет качества.
 ## Шанс предмета = chance_starter / chance_mid / chance_elite
 ## (колонки CSV res://data/magic_auction_items.csv).
-func _place_tier_items(count: int) -> void:
+func _place_tier_items(count: int, field_seed: int = -1) -> void:
 	field_items.clear()
+	if field_seed >= 0:
+		_item_rng.seed = field_seed
+	else:
+		_item_rng.randomize()
 	# Колонка шансов выбранного поля (по умолчанию — начальное).
 	var chance_key: String = "chance_starter"
 	if current_tier >= 0:
@@ -1545,6 +1638,9 @@ func _on_round_timer_tick() -> void:
 	round_time_left -= 1.0
 	_update_round_timer_label()
 	if round_time_left <= 0.0:
+		if not _online_room_id.is_empty():
+			_poll_online_room()
+			return
 		_on_round_time_expired()
 
 
@@ -1558,6 +1654,8 @@ func _on_round_time_expired() -> void:
 ## Завершает текущий раунд: досрочно (все сделали ставки) или по таймеру.
 ## После 5-го раунда аукцион завершается.
 func _advance_round() -> void:
+	if not _online_room_id.is_empty():
+		return
 	if _round_finished or _auction_finished:
 		return
 	_round_finished = true
@@ -1591,10 +1689,12 @@ func _settle_auction() -> void:
 		if p.last_bid > winning_bid:
 			winner = p.id
 			winning_bid = p.last_bid
-	if winner != 1 or winning_bid <= 0:
+	var local_player_id := _server_player_id if not _online_room_id.is_empty() else 1
+	if winner != local_player_id or winning_bid <= 0:
 		add_log("[Игра] Лот выиграл %s. Ваши предметы не изменились." % _player_name(winner))
 		return
-	players[0].gold = maxi(players[0].gold - winning_bid, 0)
+	if _online_room_id.is_empty():
+		players[0].gold = maxi(players[0].gold - winning_bid, 0)
 	for item: Dictionary in field_items:
 		var won_item := {
 			"title": String(item.get("title", "Предмет")),
@@ -1656,6 +1756,8 @@ func _player_name(player_id: int) -> String:
 
 ## Все игроки поставили — новый раунд начинается, не дожидаясь таймера.
 func _check_all_bid() -> void:
+	if not _online_room_id.is_empty():
+		return
 	for p: PlayerDataS in players:
 		if not p.has_acted:
 			return
@@ -1754,6 +1856,8 @@ func _set_bid_frame(avatar: PanelContainer, active: bool) -> void:
 ## клеткам поля (публичная информация) и назначают каждому боту
 ## случайный момент ставки. В будущем вместо ботов — игроки по сети.
 func _schedule_bot_bids() -> void:
+	if not _online_room_id.is_empty():
+		return
 	var estimate := BotsControllerS.estimate_lot_value(field_items, game_field.revealed)
 	for p: PlayerDataS in players:
 		if not p.is_bot:
@@ -1783,6 +1887,8 @@ func _bot_place_bid(bot: PlayerDataS, round_at_schedule: int) -> void:
 
 
 func _check_early_victory(player_id: int) -> bool:
+	if not _online_room_id.is_empty():
+		return false
 	if _auction_finished or _field_round < 1 or _field_round > ROUND_PROTECTION.size():
 		return false
 	var player_bid := 0
@@ -1885,6 +1991,9 @@ func _on_bid_button_pressed() -> void:
 		add_log("[Игра] Введите ставку от 0 до доступного количества монет")
 		return
 	if value == 0:
+		if not _online_room_id.is_empty():
+			_submit_online_bid(0)
+			return
 		player.last_bid = 0
 		player.has_acted = true
 		add_log("[Вы] сделали ставку: 0.")
@@ -1894,6 +2003,9 @@ func _on_bid_button_pressed() -> void:
 	var amount: int = clampi(value, 1, player.gold)
 	if amount < value:
 		add_log("[Игра] Ставка ограничена доступным балансом.")
+	if not _online_room_id.is_empty():
+		_submit_online_bid(amount)
+		return
 	player.last_bid = amount
 	player.has_acted = true
 	add_log("[Вы] сделал ставку.")
@@ -1901,3 +2013,13 @@ func _on_bid_button_pressed() -> void:
 	if _check_early_victory(player.id):
 		return
 	_check_all_bid()
+
+
+func _submit_online_bid(amount: int) -> void:
+	var result: Dictionary = await _server_client.submit_auction_bid(_online_room_id, amount)
+	if not result.get("ok", false):
+		var error_data: Dictionary = result.get("data", {})
+		add_log("[Игра] Ставка не принята: %s" % String(error_data.get("error", "сервер отклонил запрос")))
+		return
+	_apply_online_room_snapshot(result.get("data", {}))
+	add_log("[Вы] ставка принята сервером.")

@@ -107,7 +107,7 @@ func reset_reveal() -> void:
 ## СИСТЕМНОЕ ОТКРЫТИЕ: в начале раунда вскрывает порцию случайных
 ## закрытых клеток — одинаковую для всех игроков. Каждый следующий
 ## раунд открывает больше клеток, чем предыдущий.
-func reveal_for_round(round: int) -> void:
+func reveal_for_round(round: int, reveal_seed: int = -1) -> void:
 	current_round = clampi(round, 1, 5)
 	var total_cells: int = FIELD_COLS * _rows
 	var to_reveal: int = mini(REVEAL_PER_ROUND[current_round - 1], total_cells)
@@ -121,7 +121,16 @@ func reveal_for_round(round: int) -> void:
 				hidden_cells.append(key)
 
 	# Открываем случайные из них.
-	hidden_cells.shuffle()
+	if reveal_seed >= 0:
+		var reveal_rng := RandomNumberGenerator.new()
+		reveal_rng.seed = reveal_seed + current_round * 7919
+		for index in range(hidden_cells.size() - 1, 0, -1):
+			var swap_index := reveal_rng.randi_range(0, index)
+			var cell := hidden_cells[index]
+			hidden_cells[index] = hidden_cells[swap_index]
+			hidden_cells[swap_index] = cell
+	else:
+		hidden_cells.shuffle()
 	for i: int in mini(to_reveal, hidden_cells.size()):
 		revealed[hidden_cells[i]] = true
 	queue_redraw()

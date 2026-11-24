@@ -48,6 +48,7 @@ let sockets = new Set();
 const MATCHMAKING_CAPACITY = 4;
 const matchmakingQueues = new Map();
 const matchmakingStarted = new Map();
+const auctionRooms = new Map();
 let ready = Promise.resolve();
 function saveState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
@@ -99,11 +100,67 @@ function requirePlayer(req, res) {
   return player;
 }
 
+function createAuctionRoom(tier, playerIds, botCount = 0) {
+  const room = {
+    id: id(), tier: Number(tier), fieldSeed: crypto.randomInt(1, 2147483647),
+    status: 'active', round: 1, roundEndsAt: Date.now() + 40000,
+    bids: {}, previousBids: {}, winnerId: null, winningBid: 0, settled: false,
+    players: playerIds.map((playerId) => ({ id: playerId, isBot: false }))
+  };
+  for (let index = 0; index < botCount; index += 1) {
+    const botId = -(index + 1);
+    room.players.push({ id: botId, isBot: true, name: `Бот ${index + 1}` });
+    room.bids[String(botId)] = 0;
+  }
+  auctionRooms.set(room.id, room);
+  return room;
+}
+
+function roomForPlayer(roomId, playerId) {
+  const room = auctionRooms.get(String(roomId));
+  return room && room.players.some((entry) => entry.id === playerId) ? room : null;
+}
+
+function processAuctionRoom(room) {
+  if (!room || room.status !== 'active') return;
+  const humanPlayers = room.players.filter((entry) => !entry.isBot);
+  const allActed = humanPlayers.every((entry) => Object.prototype.hasOwnProperty.call(room.bids, String(entry.id)));
+  if (Date.now() < room.roundEndsAt && !allActed) return;
+  room.previousBids = { ...room.bids };
+  const ranked = Object.entries(room.bids).sort((a, b) => Number(b[1]) - Number(a[1]));
+  if (ranked.length) {
+    const [winnerId, bid] = ranked[0];
+    room.winnerId = Number(winnerId); room.winningBid = Number(bid);
+  }
+  if (room.round >= 5) {
+    room.status = 'finished';
+    if (!room.settled && room.winnerId > 0) {
+      const winner = state.players.find((player) => player.id === room.winnerId);
+      if (winner) winner.coins = Math.max(0, Number(winner.coins || 0) - room.winningBid);
+      room.settled = true;
+      saveState();
+    }
+    return;
+  }
+  room.round += 1; room.bids = {}; room.roundEndsAt = Date.now() + 40000;
+  for (const entry of room.players) if (entry.isBot) room.bids[String(entry.id)] = 0;
+}
+
+function publicAuctionRoom(room) {
+  processAuctionRoom(room);
+  const players = room.players.map((entry) => {
+    const profile = state.players.find((player) => player.id === entry.id);
+    return { id: entry.id, displayName: entry.isBot ? entry.name : (profile?.displayName || profile?.login || 'Игрок'), isBot: entry.isBot, coins: profile?.coins || 0, bid: room.bids[String(entry.id)], hasActed: Object.prototype.hasOwnProperty.call(room.bids, String(entry.id)) };
+  });
+  return { roomId: room.id, tier: room.tier, fieldSeed: room.fieldSeed, status: room.status, round: room.round, roundEndsAt: room.roundEndsAt, serverNow: Date.now(), bids: room.bids, previousBids: room.previousBids, winnerId: room.winnerId, winningBid: room.winningBid, players };
+}
+
 function matchmakingStatus(tier, playerId = 0) {
   const queue = matchmakingQueues.get(String(tier)) || [];
   const started = matchmakingStarted.get(String(tier));
-  const isStarted = Boolean(started && started.players.includes(playerId) && Date.now() - started.startedAt < 60000);
-  return { tier: Number(tier), waitingPlayers: queue.length, capacity: MATCHMAKING_CAPACITY, ready: queue.length >= MATCHMAKING_CAPACITY || isStarted, status: isStarted ? 'started' : 'waiting' };
+  const room = started ? auctionRooms.get(started.roomId) : null;
+  const isStarted = Boolean(room && room.players.some((entry) => entry.id === playerId));
+  return { tier: Number(tier), waitingPlayers: queue.length, capacity: MATCHMAKING_CAPACITY, ready: queue.length >= MATCHMAKING_CAPACITY || isStarted, status: isStarted ? 'started' : 'waiting', roomId: isStarted ? room.id : '' };
 }
 
 function addNews(title, message, type = 'market') {
@@ -249,9 +306,10 @@ async function handle(req, res) {
       matchmakingQueues.set(tier, queue);
       const snapshot = matchmakingStatus(tier);
       if (queue.length >= MATCHMAKING_CAPACITY) {
-        matchmakingStarted.set(tier, { players: [...queue], startedAt: Date.now() });
+        const room = createAuctionRoom(tier, [...queue], 0);
+        matchmakingStarted.set(tier, { roomId: room.id });
         matchmakingQueues.delete(tier);
-        return json(res, 200, { ...snapshot, waitingPlayers: queue.length, ready: true, status: 'started' });
+        return json(res, 200, { ...snapshot, waitingPlayers: queue.length, ready: true, status: 'started', roomId: room.id });
       }
       return json(res, 200, snapshot);
     }
@@ -260,15 +318,40 @@ async function handle(req, res) {
       if (!['0', '1', '2'].includes(tier)) return error(res, 400, 'Поле аукциона указано неверно');
       const queue = matchmakingQueues.get(tier) || [];
       if (!queue.includes(player.id)) queue.push(player.id);
-      matchmakingStarted.set(tier, { players: [...queue], startedAt: Date.now() });
+      const room = createAuctionRoom(tier, [...queue], Math.max(0, MATCHMAKING_CAPACITY - queue.length));
+      matchmakingStarted.set(tier, { roomId: room.id });
       matchmakingQueues.delete(tier);
-      return json(res, 200, { ...matchmakingStatus(tier, player.id), waitingPlayers: queue.length, ready: true, status: 'started', humanPlayers: queue.length, bots: Math.max(0, MATCHMAKING_CAPACITY - queue.length) });
+      return json(res, 200, { ...matchmakingStatus(tier, player.id), waitingPlayers: queue.length, ready: true, status: 'started', roomId: room.id, humanPlayers: queue.length, bots: Math.max(0, MATCHMAKING_CAPACITY - queue.length) });
     }
     if (url.pathname === '/api/v1/matchmaking/leave' && req.method === 'POST') {
       const data = await body(req); const tier = String(Number(data.tier));
       const queue = (matchmakingQueues.get(tier) || []).filter((id) => id !== player.id);
       if (queue.length) matchmakingQueues.set(tier, queue); else matchmakingQueues.delete(tier);
       return json(res, 200, matchmakingStatus(tier, player.id));
+    }
+    if (parts[0] === 'api' && parts[1] === 'v1' && parts[2] === 'auction' && parts[3] === 'rooms' && req.method === 'GET') {
+      const room = roomForPlayer(parts[4], player.id);
+      if (!room) return error(res, 404, 'Игровая комната не найдена');
+      return json(res, 200, publicAuctionRoom(room));
+    }
+    if (parts[0] === 'api' && parts[1] === 'v1' && parts[2] === 'auction' && parts[3] === 'rooms' && parts[5] === 'bid' && req.method === 'POST') {
+      const room = roomForPlayer(parts[4], player.id);
+      if (!room || room.status !== 'active') return error(res, 404, 'Аукцион недоступен');
+      processAuctionRoom(room);
+      if (room.status !== 'active') return json(res, 200, publicAuctionRoom(room));
+      if (Object.prototype.hasOwnProperty.call(room.bids, String(player.id))) return error(res, 400, 'Вы уже сделали ставку в этом раунде');
+      const data = await body(req); const amount = Number(data.amount);
+      if (!Number.isInteger(amount) || amount < 0 || amount > Number(player.coins || 0)) return error(res, 400, 'Ставка должна быть целым числом от 0 до доступного баланса');
+      room.bids[String(player.id)] = amount;
+      const otherBids = Object.entries(room.bids).filter(([id]) => Number(id) !== player.id).map(([, bid]) => Number(bid));
+      const highestOther = otherBids.length ? Math.max(...otherBids) : 0;
+      const protection = [2.0, 1.5, 1.3, 1.1, 1.0][Math.max(0, Math.min(4, room.round - 1))];
+      if (amount > 0 && highestOther > 0 && amount > Math.ceil(highestOther * protection)) {
+        room.previousBids = { ...room.bids }; room.winnerId = player.id; room.winningBid = amount; room.status = 'finished';
+        player.coins = Math.max(0, Number(player.coins || 0) - amount); room.settled = true;
+      }
+      saveState();
+      return json(res, 200, publicAuctionRoom(room));
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/castle') { const castle = ensureCastle(player); saveState(); return json(res, 200, castle); }
     if (req.method === 'POST' && url.pathname === '/api/v1/castle/collect') {

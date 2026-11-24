@@ -191,6 +191,15 @@ func leave_matchmaking(tier: int) -> Dictionary:
 		{"tier": tier})
 
 
+func get_auction_room(room_id: String) -> Dictionary:
+	return await _request_json("/api/v1/auction/rooms/%s" % room_id)
+
+
+func submit_auction_bid(room_id: String, amount: int) -> Dictionary:
+	return await _request_json("/api/v1/auction/rooms/%s/bid" % room_id,
+		HTTPClient.METHOD_POST, {"amount": amount})
+
+
 func _request_json(path: String, method: HTTPClient.Method = HTTPClient.METHOD_GET,
 		payload: Dictionary = {}) -> Dictionary:
 	var request := HTTPRequest.new()
