@@ -229,6 +229,27 @@ async function handle(req, res) {
       const instance = { id: id(), definitionId: definition.id, name: definition.name, baseCost: definition.baseCost, quality: Number(data.quality || definition.rarity), state: 'inventory' };
       player.inventory.push(instance); saveState(); return json(res, 201, instance);
     }
+    if (req.method === 'POST' && url.pathname === '/api/v1/inventory/claim-field-item') {
+      const data = await body(req);
+      if (!data.title) return error(res, 400, 'Нужно название предмета');
+      const quality = Math.max(1, Math.min(5, Number(data.quality || 1)));
+      const instance = {
+        id: id(),
+        definitionId: String(data.gearClassId || data.gear_class_id || data.definitionId || data.title),
+        name: String(data.title),
+        baseCost: Math.max(0, Number(data.cost || data.baseCost || 0)),
+        quality,
+        rarity: quality,
+        type: String(data.type || 'sellable'),
+        gearClassId: String(data.gearClassId || data.gear_class_id || ''),
+        sizeX: Math.max(1, Number(data.sizeX || 1)),
+        sizeY: Math.max(1, Number(data.sizeY || 1)),
+        description: String(data.description || ''),
+        state: 'inventory'
+      };
+      player.inventory.push(instance); saveState();
+      return json(res, 201, { instance, player: publicPlayer(player) });
+    }
     if (req.method === 'POST' && url.pathname === '/api/v1/market/listings') {
       const data = await body(req); const item = player.inventory.find((x) => x.id === data.instanceId && x.state === 'inventory');
       const price = Number(data.price);

@@ -47,6 +47,10 @@ func sell_to_server(instance_id: String) -> Dictionary:
 		{"instanceId": instance_id})
 
 
+func claim_field_item(item: Dictionary) -> Dictionary:
+	return await _request_json("/api/v1/inventory/claim-field-item", HTTPClient.METHOD_POST, item)
+
+
 func equip_item(instance_id: String, slot: String) -> Dictionary:
 	return await _request_json("/api/v1/equipment/equip", HTTPClient.METHOD_POST,
 		{"instanceId": instance_id, "slot": slot})

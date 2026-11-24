@@ -1170,6 +1170,7 @@ func _place_tier_items(count: int) -> void:
 			"type": String(info.get("type", "sellable")),
 			"gear_class_id": String(info.get("gear_class_id", "")),
 			"size": item_size,
+			"description": String(info.get("description", "")),
 			"color": GameData.QUALITY_COLORS[info["quality"]],
 		})
 		col += item_size.x + 1
@@ -1333,12 +1334,36 @@ func _settle_auction() -> void:
 			"quality": int(item.get("quality", 1)),
 			"type": String(item.get("type", "sellable")),
 			"gear_class_id": String(item.get("gear_class_id", "")),
+			"description": String(item.get("description", "")),
 		}
 		inventory.append(won_item)
+		if _server_connected:
+			_claim_field_item_on_server(item)
 	SaveDataS.save_game(players[0].gold, inventory)
 	add_log("[Победа] Вы выиграли %d предмет(ов)." % field_items.size())
 	_update_player_labels()
 	_refresh_inventory()
+
+
+func _claim_field_item_on_server(item: Dictionary) -> void:
+	var size_value: Variant = item.get("size", Vector2i(1, 1))
+	var size_x := int(item.get("w", 1))
+	var size_y := int(item.get("h", 1))
+	if size_value is Vector2i:
+		size_x = size_value.x
+		size_y = size_value.y
+	var result: Dictionary = await _server_client.claim_field_item({
+		"title": String(item.get("title", "Предмет")),
+		"cost": int(item.get("cost", 0)),
+		"quality": int(item.get("quality", 1)),
+		"type": String(item.get("type", "sellable")),
+		"gearClassId": String(item.get("gear_class_id", "")),
+		"sizeX": size_x,
+		"sizeY": size_y,
+		"description": String(item.get("description", "")),
+	})
+	if result.get("ok", false):
+		_apply_server_profile(result.get("data", {}).get("player", {}))
 
 
 func _show_field_selection_in_game_area() -> void:
