@@ -90,10 +90,14 @@ const EQUIP_SLOT_LABELS: Dictionary = {
 @onready var calc_gold_label: Label = $MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGoldLabel
 @onready var bid_button: Button = $MainHBox/RightColumn/CalcPanel/CalcVBox/BidButton
 @onready var main_hbox: HBoxContainer = $MainHBox
+@onready var center_column: VBoxContainer = $MainHBox/CenterColumn
+@onready var round_info_panel: PanelContainer = $MainHBox/CenterColumn/RoundInfoPanel
 
 ## Текущее выражение калькулятора (набирается кнопками).
 var calc_expression: String = ""
 var _calc_prefilled: bool = false
+var _central_view_host: PanelContainer
+var _active_central_view: String = "auction"
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -113,6 +117,7 @@ func _ready() -> void:
 	_setup_players()
 	_init_placeholders()
 	_setup_inventory_panel()
+	_setup_central_navigation()
 	_setup_field_selection()
 	_setup_calc()
 
@@ -150,6 +155,54 @@ func _setup_inventory_panel() -> void:
 	box.add_child(_inventory_list)
 	$MainHBox/LeftColumn.add_child(panel)
 	_refresh_inventory()
+
+
+func _setup_central_navigation() -> void:
+	var navigation := PanelContainer.new()
+	navigation.name = "CentralNavigation"
+	var nav_row := HBoxContainer.new()
+	navigation.add_child(nav_row)
+	for view: Dictionary in [
+		{"id": "castle", "title": "Замок"},
+		{"id": "auction", "title": "Аукцион"},
+		{"id": "market", "title": "Рынок"},
+		{"id": "potions", "title": "Зелья"},
+	]:
+		var button := Button.new()
+		button.text = String(view["title"])
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(_show_central_view.bind(String(view["id"])))
+		nav_row.add_child(button)
+	center_column.add_child(navigation)
+	center_column.move_child(navigation, 0)
+
+	_central_view_host = PanelContainer.new()
+	_central_view_host.name = "CentralViewHost"
+	_central_view_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var label := Label.new()
+	label.name = "ViewLabel"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 28)
+	_central_view_host.add_child(label)
+	center_column.add_child(_central_view_host)
+	_central_view_host.visible = false
+
+
+func _show_central_view(view_id: String) -> void:
+	_active_central_view = view_id
+	var is_auction := view_id == "auction"
+	round_info_panel.visible = is_auction
+	field_hbox.visible = is_auction
+	_central_view_host.visible = not is_auction
+	if not is_auction:
+		var view_label: Label = _central_view_host.get_node("ViewLabel")
+		var titles := {
+			"castle": "Замок\n\nЗдесь будут башни, улучшения и пассивный доход.",
+			"market": "Рынок игроков\n\nЗдесь будут обычные объявления и легендарные аукционы.",
+			"potions": "Башня зелий\n\nЗдесь будут рецепты и производство зелий.",
+		}
+		view_label.text = String(titles.get(view_id, "Раздел в разработке"))
 
 
 func _refresh_inventory() -> void:
@@ -257,6 +310,7 @@ func _on_tier_selected(tier: int) -> void:
 	_tier_overlay.visible = false
 	main_hbox.visible = true
 	game_field_panel.visible = true
+	_show_central_view("auction")
 	# Боты тоже вошли на это поле — их золото не ниже порога входа.
 	for i: int in range(1, players.size()):
 		players[i].gold = maxi(players[i].gold, min_gold)
