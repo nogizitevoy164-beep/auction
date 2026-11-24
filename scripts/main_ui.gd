@@ -675,8 +675,7 @@ func _local_catalog_items() -> Array:
 			gear["baseCost"] = int(gear.get("base_cost", 0))
 			gear["iconPath"] = String(gear.get("icon_path", ""))
 			gear["description"] = equip.ability_description()
-			gear["properties"] = "Слот: %s\nРазмер: %dx%d" % [
-				GameData.SLOT_NAMES[equip.slot()], equip.size_x, equip.size_y]
+			gear["properties"] = "Слот: %s" % GameData.SLOT_NAMES[equip.slot()]
 			result.append(gear)
 	return result
 
@@ -747,6 +746,10 @@ func _catalog_card(item: Dictionary) -> PanelContainer:
 	meta.add_theme_font_size_override("font_size", 11)
 	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info.add_child(meta)
+	var size_label := Label.new()
+	size_label.text = _catalog_size_text(item)
+	size_label.add_theme_font_size_override("font_size", 11)
+	info.add_child(size_label)
 	var properties_text := _catalog_properties(item)
 	if not properties_text.is_empty():
 		var properties := Label.new()
@@ -777,6 +780,32 @@ func _catalog_properties(item: Dictionary) -> String:
 		return String(properties)
 	var weapon_kind := String(item.get("weaponKind", ""))
 	return "Оружие: %s" % weapon_kind if not weapon_kind.is_empty() else ""
+
+
+func _catalog_size_text(item: Dictionary) -> String:
+	var size_value: Variant = item.get("size", null)
+	var width := int(item.get("sizeX", item.get("width", 0)))
+	var height := int(item.get("sizeY", item.get("height", 0)))
+	if size_value is Vector2i:
+		width = size_value.x
+		height = size_value.y
+	elif size_value is Dictionary:
+		width = int(size_value.get("x", size_value.get("width", width)))
+		height = int(size_value.get("y", size_value.get("height", height)))
+	var item_id := String(item.get("baseId", item.get("id", "")))
+	if width <= 0 or height <= 0:
+		if GameData.SELLABLE_ITEMS.has(item_id):
+			var sellable_size: Vector2i = GameData.SELLABLE_ITEMS[item_id]["size"]
+			width = sellable_size.x
+			height = sellable_size.y
+		elif GameData.GEAR_CLASSES.has(item_id):
+			var gear_size: Vector2i = GameData.GEAR_CLASSES[item_id]["size"]
+			width = gear_size.x
+			height = gear_size.y
+	if width <= 0 or height <= 0:
+		width = 1
+		height = 1
+	return "Размер: %d×%d клетки" % [width, height]
 
 
 func _catalog_icon(item: Dictionary) -> TextureRect:
