@@ -9,6 +9,7 @@ const PlayerDataS = preload("res://scripts/player_data.gd")
 const BotsControllerS = preload("res://scripts/bots_controller.gd")
 const SaveDataS = preload("res://scripts/save_data.gd")
 const GameFieldS = preload("res://scripts/game_field.gd")
+const ServerClientS = preload("res://scripts/server_client.gd")
 
 # ==================== ИГРОВОЕ ПОЛЕ ====================
 ## Сетка рисуется узлом GameField (scripts/game_field.gd):
@@ -98,6 +99,7 @@ var calc_expression: String = ""
 var _calc_prefilled: bool = false
 var _central_view_host: PanelContainer
 var _active_central_view: String = "auction"
+var _server_client: Node
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -120,6 +122,30 @@ func _ready() -> void:
 	_setup_central_navigation()
 	_setup_field_selection()
 	_setup_calc()
+	_server_client = ServerClientS.new()
+	add_child(_server_client)
+	call_deferred("_sync_with_server")
+
+
+func _sync_with_server() -> void:
+	var profile = await _server_client.connect_guest()
+	if profile.is_empty():
+		add_log("[Сервер] Сервер недоступен — используется локальный режим.")
+		return
+	players[0].gold = maxi(int(profile.get("coins", players[0].gold)), 0)
+	inventory.clear()
+	for server_item: Variant in profile.get("inventory", []):
+		if server_item is Dictionary:
+			inventory.append({
+				"id": String(server_item.get("id", "")),
+				"title": String(server_item.get("name", "Предмет")),
+				"cost": int(server_item.get("baseCost", 0)),
+				"quality": int(server_item.get("quality", 1)),
+			})
+	SaveDataS.save_game(players[0].gold, inventory)
+	_update_player_labels()
+	_refresh_inventory()
+	add_log("[Сервер] Подключено: %s." % String(profile.get("login", "игрок")))
 
 
 # ============================================================
