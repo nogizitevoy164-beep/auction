@@ -1,0 +1,13 @@
+{
+  "name": "auction-server-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Single-server prototype for the Auction Godot game",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test_server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

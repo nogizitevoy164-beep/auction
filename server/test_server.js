@@ -1,5 +1,6 @@
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const WebSocket = require('ws');
 
 const port = 18080;
 const dataFile = require('node:path').join(__dirname, `test-runtime-${process.pid}.json`);
@@ -16,6 +17,10 @@ async function request(path, options = {}) {
 (async () => {
   try {
     const health = await request('/health'); assert.equal(health.status, 200);
+    const admin = await request('/admin'); assert.equal(admin.status, 200);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    await new Promise((resolve, reject) => { ws.once('message', (message) => { assert.equal(JSON.parse(message).type, 'connected'); resolve(); }); ws.once('error', reject); });
+    ws.close();
     const created = await request('/api/v1/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login: `test_${Date.now()}` }) });
     assert.equal(created.status, 201); const account = await created.json();
     const headers = { authorization: `Bearer ${account.token}`, 'content-type': 'application/json' };
