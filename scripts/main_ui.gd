@@ -366,6 +366,7 @@ func _setup_central_navigation() -> void:
 		{"id": "market", "title": "Рынок"},
 		{"id": "legendary", "title": "Легендарные"},
 		{"id": "potions", "title": "Зелья"},
+		{"id": "catalog", "title": "Каталог"},
 	]:
 		var button := Button.new()
 		button.text = String(view["title"])
@@ -417,6 +418,8 @@ func _show_central_view(view_id: String) -> void:
 			_load_potions_view()
 		elif view_id == "legendary":
 			_load_legendary_view()
+		elif view_id == "catalog":
+			_load_catalog_view()
 
 
 func _replace_central_box() -> VBoxContainer:
@@ -615,6 +618,135 @@ func _bid_legendary(auction_id: String, amount_input: LineEdit) -> void:
 		return
 	add_log("[Легендарный аукцион] Ставка принята.")
 	_load_legendary_view()
+
+
+func _load_catalog_view() -> void:
+	var box := _replace_central_box()
+	var title := Label.new()
+	title.text = "Каталог предметов"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	box.add_child(title)
+	var status := Label.new()
+	status.text = "Загрузка каталога..."
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(status)
+	var items: Array = []
+	if _server_connected:
+		var response: Dictionary = await _server_client.get_catalog_items()
+		if response.get("ok", false):
+			items = response.get("data", {}).get("items", [])
+	if items.is_empty():
+		items = _local_catalog_items()
+	if not is_instance_valid(status):
+		return
+	status.queue_free()
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	scroll.add_child(grid)
+	for item: Variant in items:
+		if item is Dictionary:
+			grid.add_child(_catalog_card(item))
+
+
+func _local_catalog_items() -> Array:
+	var result: Array = []
+	for item_id: String in GameData.SELLABLE_ITEMS:
+		var item: Dictionary = GameData.SELLABLE_ITEMS[item_id].duplicate(true)
+		item["id"] = item_id
+		item["type"] = "sellable"
+		item["rarity"] = int(item.get("quality", 1))
+		item["baseCost"] = int(item.get("cost", 0))
+		result.append(item)
+	for gear_id: String in GameData.GEAR_CLASSES:
+		var gear: Dictionary = GameData.GEAR_CLASSES[gear_id].duplicate(true)
+		gear["id"] = gear_id
+		gear["type"] = "equipment"
+		gear["rarity"] = int(gear.get("quality", 1))
+		gear["baseCost"] = int(gear.get("cost", 0))
+		gear["description"] = String(gear.get("ability", ""))
+		result.append(gear)
+	return result
+
+
+func _catalog_card(item: Dictionary) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(300, 150)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	card.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	margin.add_child(row)
+	var icon := _catalog_icon(item)
+	row.add_child(icon)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(info)
+	var name_label := Label.new()
+	name_label.text = String(item.get("name", item.get("title", "Предмет")))
+	name_label.add_theme_font_size_override("font_size", 18)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.add_child(name_label)
+	var meta := Label.new()
+	meta.text = "Тип: %s | Качество: %s | Стоимость: %d монет" % [
+		String(item.get("type", "предмет")), _catalog_rarity_name(int(item.get("rarity", item.get("quality", 1)))),
+		int(item.get("baseCost", item.get("cost", 0)))]
+	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.add_child(meta)
+	var properties := Label.new()
+	properties.text = "Свойства: %s" % _catalog_properties(item)
+	properties.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.add_child(properties)
+	var description := Label.new()
+	description.text = "Описание: %s" % String(item.get("description", "Описание отсутствует."))
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.add_child(description)
+	return card
+
+
+func _catalog_rarity_name(value: int) -> String:
+	var names: Array[String] = ["", "Обычное", "Необычное", "Редкое", "Эпическое", "Легендарное"]
+	return names[clampi(value, 1, 5)]
+
+
+func _catalog_properties(item: Dictionary) -> String:
+	var properties: Variant = item.get("properties", "")
+	if properties is Dictionary or properties is Array:
+		return JSON.stringify(properties)
+	if not String(properties).is_empty():
+		return String(properties)
+	var weapon_kind := String(item.get("weaponKind", ""))
+	return "Оружие: %s" % weapon_kind if not weapon_kind.is_empty() else "Без особых свойств"
+
+
+func _catalog_icon(item: Dictionary) -> TextureRect:
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(64, 64)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var icon_value := String(item.get("icon", item.get("iconPath", "")))
+	if icon_value.begins_with("res://"):
+		icon.texture = load(icon_value)
+	elif icon_value.begins_with("data:image/"):
+		var parts := icon_value.split(",", false, 1)
+		if parts.size() == 2:
+			var image := Image.new()
+			var raw := Marshalls.base64_to_raw(parts[1])
+			var loaded: Error = image.load_from_buffer(raw)
+			if loaded == OK:
+				icon.texture = ImageTexture.create_from_image(image)
+	return icon
 
 
 func _refresh_inventory() -> void:

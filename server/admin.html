@@ -1,16 +1,53 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="utf-8"><title>Auction Admin</title><style>body{font:16px sans-serif;max-width:900px;margin:2rem auto;background:#16151e;color:#eee}input,button{padding:.55rem;margin:.25rem;background:#282638;color:#fff;border:1px solid #625a85}button{cursor:pointer}.item{border:1px solid #45405d;padding:.6rem;margin:.4rem 0}</style></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auction Admin — каталог</title>
+<style>
+body{font:16px sans-serif;max-width:1180px;margin:2rem auto;padding:0 1rem;background:#16151e;color:#eee}
+input,textarea,select,button{box-sizing:border-box;padding:.55rem;margin:.25rem;background:#282638;color:#fff;border:1px solid #625a85;border-radius:4px}
+input,textarea,select{width:100%}textarea{min-height:80px;resize:vertical}button{cursor:pointer;width:auto}.toolbar{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem}.wide{grid-column:1/-1}
+.item{display:grid;grid-template-columns:72px 1fr auto;gap:1rem;align-items:center;border:1px solid #45405d;padding:.7rem;margin:.5rem 0;border-radius:6px}.item img{width:64px;height:64px;object-fit:contain;background:#211f2d}.muted{color:#aaa;font-size:.9rem}.form{border:1px solid #45405d;padding:1rem;border-radius:6px}.actions{display:flex;gap:.4rem;align-items:center}.preview{width:80px;height:80px;object-fit:contain;background:#211f2d;border:1px solid #45405d;display:block;margin:.4rem 0}
+@media(max-width:760px){.toolbar{grid-template-columns:1fr}.item{grid-template-columns:56px 1fr}.item .actions{grid-column:2}.item img{width:52px;height:52px}}
+</style>
+</head>
 <body>
 <h1>Панель администратора Auction</h1>
-<p>Ключ разработки: <input id="key" value="dev-admin-key" type="password"></p>
+<p>Ключ администратора: <input id="key" value="dev-admin-key" type="password"></p>
+<section class="form">
 <h2>Создать или изменить предмет</h2>
-<input id="id" placeholder="id"><input id="name" placeholder="Название"><input id="cost" placeholder="Стоимость" type="number">
-<input id="starter" placeholder="Шанс starter" type="number" step="0.01"><input id="mid" placeholder="Шанс mid" type="number" step="0.01"><input id="elite" placeholder="Шанс elite" type="number" step="0.01">
-<button onclick="saveItem()">Сохранить</button><button onclick="loadItems()">Обновить</button>
+<div class="toolbar">
+<input id="id" placeholder="ID предмета">
+<input id="name" placeholder="Название">
+<input id="cost" placeholder="Стоимость" type="number" min="0">
+<select id="type"><option value="sellable">Обычный предмет</option><option value="equipment">Экипировка</option><option value="weapon">Оружие</option><option value="potion">Зелье</option></select>
+<input id="rarity" placeholder="Качество 1–5" type="number" min="1" max="5" value="1">
+<input id="weaponKind" placeholder="Тип оружия (dagger/sword/staff)">
+<textarea id="description" class="wide" placeholder="Описание предмета"></textarea>
+<textarea id="properties" class="wide" placeholder="Свойства и способности (текст или JSON)"></textarea>
+<label>Иконка/картинка<input id="iconFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label>
+<div><img id="preview" class="preview" alt="Предпросмотр"></div>
+<input id="starter" placeholder="Шанс starter" type="number" step="0.01" min="0">
+<input id="mid" placeholder="Шанс mid" type="number" step="0.01" min="0">
+<input id="elite" placeholder="Шанс elite" type="number" step="0.01" min="0">
+</div>
+<div class="actions"><button onclick="saveItem()">Сохранить предмет</button><button onclick="clearForm()">Очистить форму</button><span id="status" class="muted"></span></div>
+</section>
+<h2>Все предметы в игре</h2>
+<div class="actions"><button onclick="loadItems()">Обновить каталог</button><span id="count" class="muted"></span></div>
 <div id="items"></div>
 <script>
-async function loadItems(){const r=await fetch('/api/v1/catalog/items');const d=await r.json();items.innerHTML=d.items.map(x=>`<div class="item"><b>${x.id}</b> — ${x.name}, ${x.baseCost} монет; шансы: ${x.chances.starter}/${x.chances.mid}/${x.chances.elite}</div>`).join('')}
-async function saveItem(){const body={id:id.value,name:name.value,baseCost:Number(cost.value),chances:{starter:Number(starter.value),mid:Number(mid.value),elite:Number(elite.value)}};const r=await fetch('/api/v1/admin/items',{method:'POST',headers:{'content-type':'application/json','x-admin-key':key.value},body:JSON.stringify(body)});alert((await r.json()).error||'Сохранено');loadItems()}
+let iconData='';
+const el=id=>document.getElementById(id);
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rarity=value=>['','Обычное','Необычное','Редкое','Эпическое','Легендарное'][Math.max(1,Math.min(5,Number(value)||1))];
+el('iconFile').addEventListener('change',event=>{const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{iconData=reader.result;el('preview').src=iconData};reader.readAsDataURL(file)});
+function fillForm(x){el('id').value=x.id||'';el('name').value=x.name||'';el('cost').value=x.baseCost??0;el('type').value=x.type||'sellable';el('rarity').value=x.rarity||1;el('weaponKind').value=x.weaponKind||'';el('description').value=x.description||'';el('properties').value=typeof x.properties==='string'?x.properties:JSON.stringify(x.properties||'');el('starter').value=x.chances?.starter??0;el('mid').value=x.chances?.mid??0;el('elite').value=x.chances?.elite??0;iconData=x.icon||x.iconPath||'';el('preview').src=iconData||'';window.scrollTo({top:0,behavior:'smooth'})}
+function clearForm(){document.querySelectorAll('.form input,.form textarea').forEach(x=>{if(x.id!=='rarity')x.value=''});el('rarity').value=1;el('type').value='sellable';el('preview').src='';iconData=''}
+async function loadItems(){const r=await fetch('/api/v1/catalog/items');const d=await r.json();if(!r.ok){el('status').textContent=d.error||'Ошибка загрузки';return}el('count').textContent=`Предметов: ${d.items.length}`;el('items').innerHTML=d.items.map(x=>`<div class="item"><img src="${esc(x.icon||x.iconPath||'')}" alt=""><div><b>${esc(x.name||x.id)}</b> <span class="muted">(${esc(x.id)})</span><br>Тип: ${esc(x.type||'—')}; качество: ${esc(rarity(x.rarity))}; стоимость: ${Number(x.baseCost||0)} монет<br>Шансы: ${Number(x.chances?.starter||0)} / ${Number(x.chances?.mid||0)} / ${Number(x.chances?.elite||0)}<br>${esc(x.description||'Описание отсутствует')}<br><span class="muted">Свойства: ${esc(typeof x.properties==='string'?x.properties:JSON.stringify(x.properties||'—'))}</span></div><div class="actions"><button onclick='fillForm(${JSON.stringify(x).replace(/'/g,'&#39;')})'>Редактировать</button></div></div>`).join('')}
+async function saveItem(){const body={id:el('id').value.trim(),name:el('name').value.trim(),baseCost:Number(el('cost').value||0),type:el('type').value,rarity:Number(el('rarity').value||1),weaponKind:el('weaponKind').value.trim(),description:el('description').value,properties:el('properties').value,chances:{starter:Number(el('starter').value||0),mid:Number(el('mid').value||0),elite:Number(el('elite').value||0)}};if(iconData)body.icon=iconData;if(!body.id||!body.name){el('status').textContent='Укажите ID и название';return}const r=await fetch('/api/v1/admin/items',{method:'POST',headers:{'content-type':'application/json','x-admin-key':el('key').value},body:JSON.stringify(body)});const d=await r.json();el('status').textContent=d.error||'Сохранено';if(r.ok)loadItems()}
 loadItems();
-</script></body></html>
+</script>
+</body>
+</html>

@@ -38,6 +38,10 @@ func get_profile() -> Dictionary:
 	return response["data"] if response.get("ok", false) else {}
 
 
+func get_catalog_items() -> Dictionary:
+	return await _request_json("/api/v1/catalog/items")
+
+
 func sell_to_server(instance_id: String) -> Dictionary:
 	return await _request_json("/api/v1/inventory/sell", HTTPClient.METHOD_POST,
 		{"instanceId": instance_id})
