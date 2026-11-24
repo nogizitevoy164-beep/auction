@@ -271,6 +271,17 @@ async function handle(req, res) {
       const seller = state.players.find((p) => p.id === listing.sellerId); const item = seller.inventory.find((x) => x.id === listing.instanceId);
       player.coins -= listing.price; seller.coins += listing.price; item.state = 'inventory'; seller.listings = seller.listings.filter((x) => x.id !== listing.id); player.inventory.push(item); listing.status = 'sold'; addNews('Предмет продан', `${item.name} был продан на рынке.`, 'market'); saveState(); return json(res, 200, { listing, player: publicPlayer(player) });
     }
+    if (req.method === 'POST' && parts[0] === 'api' && parts[1] === 'v1' && parts[2] === 'market' && parts[3] === 'listings' && parts[5] === 'cancel') {
+      const listingId = Number(parts[4]);
+      const listing = player.listings.find((x) => x.id === listingId && x.status === 'active');
+      if (!listing) return error(res, 404, 'Лот не найден или принадлежит другому игроку');
+      const item = player.inventory.find((x) => x.id === listing.instanceId);
+      if (item) item.state = 'inventory';
+      listing.status = 'cancelled';
+      player.listings = player.listings.filter((x) => x.id !== listing.id);
+      saveState();
+      return json(res, 200, { listing, player: publicPlayer(player) });
+    }
     if (req.method === 'POST' && parts[0] === 'api' && parts[1] === 'v1' && parts[2] === 'legendary-auctions' && parts[4] === 'bid') {
       const auction = state.legendaryAuctions.find((x) => x.id === parts[3] && x.status === 'active');
       const data = await body(req); const amount = Number(data.amount);

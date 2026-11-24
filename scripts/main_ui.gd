@@ -111,6 +111,7 @@ var _central_view_host: PanelContainer
 var _active_central_view: String = "auction"
 var _server_client: Node
 var _server_connected: bool = false
+var _server_player_id: int = 0
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -152,6 +153,7 @@ func _sync_with_server() -> void:
 
 
 func _apply_server_profile(profile: Dictionary) -> void:
+	_server_player_id = int(profile.get("id", _server_player_id))
 	players[0].gold = maxi(int(profile.get("coins", players[0].gold)), 0)
 	if profile.has("fieldRules") and profile["fieldRules"] is Dictionary:
 		_field_rules = profile["fieldRules"]
@@ -564,10 +566,17 @@ func _load_market_view() -> void:
 		label.text = "%s — %d монет" % [listing.get("name", "Предмет"), int(listing.get("price", 0))]
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
-		var buy := Button.new()
-		buy.text = "Купить"
-		buy.pressed.connect(_buy_market_listing.bind(int(listing.get("id", 0))))
-		row.add_child(buy)
+		var listing_id := int(listing.get("id", 0))
+		if int(listing.get("sellerId", 0)) == _server_player_id:
+			var cancel := Button.new()
+			cancel.text = "Снять с продажи"
+			cancel.pressed.connect(_cancel_market_listing.bind(listing_id))
+			row.add_child(cancel)
+		else:
+			var buy := Button.new()
+			buy.text = "Купить"
+			buy.pressed.connect(_buy_market_listing.bind(listing_id))
+			row.add_child(buy)
 		box.add_child(row)
 
 
@@ -579,6 +588,17 @@ func _buy_market_listing(listing_id: int) -> void:
 	var profile: Dictionary = result.get("data", {}).get("player", {})
 	_apply_server_profile(profile)
 	add_log("[Рынок] Предмет куплен и добавлен в инвентарь.")
+	_load_market_view()
+
+
+func _cancel_market_listing(listing_id: int) -> void:
+	var result: Dictionary = await _server_client.cancel_market_listing(listing_id)
+	if not result.get("ok", false):
+		var error_data: Dictionary = result.get("data", {})
+		add_log("[Рынок] Не удалось снять лот: %s" % String(error_data.get("error", "сервер отклонил запрос")))
+		return
+	_apply_server_profile(result.get("data", {}).get("player", {}))
+	add_log("[Рынок] Лот снят с продажи, предмет возвращён в инвентарь.")
 	_load_market_view()
 
 

@@ -70,6 +70,11 @@ func buy_market_listing(listing_id: int) -> Dictionary:
 		HTTPClient.METHOD_POST, {})
 
 
+func cancel_market_listing(listing_id: int) -> Dictionary:
+	return await _request_json("/api/v1/market/listings/%d/cancel" % listing_id,
+		HTTPClient.METHOD_POST, {})
+
+
 func get_castle() -> Dictionary:
 	return await _request_json("/api/v1/castle")
 
