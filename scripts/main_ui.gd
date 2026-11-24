@@ -228,13 +228,78 @@ func _show_central_view(view_id: String) -> void:
 	field_hbox.visible = is_auction
 	_central_view_host.visible = not is_auction
 	if not is_auction:
-		var view_label: Label = _central_view_host.get_node("ViewLabel")
+		for child in _central_view_host.get_children():
+			child.queue_free()
+		var view_label := Label.new()
+		view_label.name = "ViewLabel"
+		view_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		view_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		view_label.add_theme_font_size_override("font_size", 28)
+		_central_view_host.add_child(view_label)
 		var titles := {
 			"castle": "Замок\n\nЗдесь будут башни, улучшения и пассивный доход.",
 			"market": "Рынок игроков\n\nЗдесь будут обычные объявления и легендарные аукционы.",
 			"potions": "Башня зелий\n\nЗдесь будут рецепты и производство зелий.",
 		}
 		view_label.text = String(titles.get(view_id, "Раздел в разработке"))
+		if view_id == "market":
+			_load_market_view()
+
+
+func _load_market_view() -> void:
+	if not _server_connected:
+		return
+	for child in _central_view_host.get_children():
+		child.queue_free()
+	var box := VBoxContainer.new()
+	_central_view_host.add_child(box)
+	var header := Label.new()
+	header.text = "Рынок игроков"
+	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	header.add_theme_font_size_override("font_size", 24)
+	box.add_child(header)
+	var status := Label.new()
+	status.text = "Загрузка лотов..."
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(status)
+	var response: Dictionary = await _server_client.get_market_listings()
+	if not is_instance_valid(status):
+		return
+	status.queue_free()
+	if not response.get("ok", false):
+		var failed := Label.new()
+		failed.text = "Не удалось загрузить рынок"
+		box.add_child(failed)
+		return
+	var listings: Array = response.get("data", {}).get("listings", [])
+	if listings.is_empty():
+		var empty := Label.new()
+		empty.text = "Активных лотов пока нет"
+		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(empty)
+		return
+	for listing: Dictionary in listings:
+		var row := HBoxContainer.new()
+		var label := Label.new()
+		label.text = "%s — %d монет" % [listing.get("name", "Предмет"), int(listing.get("price", 0))]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		var buy := Button.new()
+		buy.text = "Купить"
+		buy.pressed.connect(_buy_market_listing.bind(int(listing.get("id", 0))))
+		row.add_child(buy)
+		box.add_child(row)
+
+
+func _buy_market_listing(listing_id: int) -> void:
+	var result: Dictionary = await _server_client.buy_market_listing(listing_id)
+	if not result.get("ok", false):
+		add_log("[Рынок] Покупка недоступна.")
+		return
+	var profile: Dictionary = result.get("data", {}).get("player", {})
+	_apply_server_profile(profile)
+	add_log("[Рынок] Предмет куплен и добавлен в инвентарь.")
+	_load_market_view()
 
 
 func _refresh_inventory() -> void:
@@ -261,6 +326,16 @@ func _refresh_inventory() -> void:
 		sell.text = "Продать %d" % SaveDataS.sell_price(item)
 		sell.pressed.connect(_sell_inventory_item.bind(index))
 		row.add_child(sell)
+		if _server_connected and not String(item.get("id", "")).is_empty():
+			var market_price := LineEdit.new()
+			market_price.custom_minimum_size = Vector2(70, 0)
+			market_price.text = str(maxi(int(item.get("cost", 1)), 1))
+			market_price.placeholder_text = "Цена"
+			row.add_child(market_price)
+			var market_button := Button.new()
+			market_button.text = "На рынок"
+			market_button.pressed.connect(_list_inventory_item_on_server.bind(index, market_price))
+			row.add_child(market_button)
 		_inventory_list.add_child(row)
 
 
@@ -289,6 +364,25 @@ func _sell_inventory_item_on_server(index: int, instance_id: String) -> void:
 	var profile: Dictionary = result.get("data", {}).get("player", {})
 	_apply_server_profile(profile)
 	add_log("[Склад] Предмет продан через сервер.")
+
+
+func _list_inventory_item_on_server(index: int, price_input: LineEdit) -> void:
+	if index < 0 or index >= inventory.size():
+		return
+	var price := int(price_input.text)
+	if price <= 0:
+		add_log("[Рынок] Укажите положительную цену.")
+		return
+	var item_id := String(inventory[index].get("id", ""))
+	var result: Dictionary = await _server_client.create_market_listing(item_id, price)
+	if not result.get("ok", false):
+		add_log("[Рынок] Не удалось выставить предмет.")
+		return
+	var profile: Dictionary = await _server_client.get_profile()
+	_apply_server_profile(profile)
+	add_log("[Рынок] Предмет выставлен на 24 часа.")
+	if _active_central_view == "market":
+		_load_market_view()
 
 
 # ============================================================

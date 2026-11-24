@@ -43,6 +43,20 @@ func equip_item(instance_id: String, slot: String) -> Dictionary:
 		{"instanceId": instance_id, "slot": slot})
 
 
+func create_market_listing(instance_id: String, price: int) -> Dictionary:
+	return await _request_json("/api/v1/market/listings", HTTPClient.METHOD_POST,
+		{"instanceId": instance_id, "price": price})
+
+
+func get_market_listings() -> Dictionary:
+	return await _request_json("/api/v1/market/listings")
+
+
+func buy_market_listing(listing_id: int) -> Dictionary:
+	return await _request_json("/api/v1/market/listings/%d/buy" % listing_id,
+		HTTPClient.METHOD_POST, {})
+
+
 func _request_json(path: String, method: HTTPClient.Method = HTTPClient.METHOD_GET,
 		payload: Dictionary = {}) -> Dictionary:
 	var request := HTTPRequest.new()
