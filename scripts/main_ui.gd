@@ -644,7 +644,7 @@ func _load_catalog_view() -> void:
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(scroll)
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 6
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
