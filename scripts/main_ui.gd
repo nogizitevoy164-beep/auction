@@ -244,6 +244,104 @@ func _show_central_view(view_id: String) -> void:
 		view_label.text = String(titles.get(view_id, "Раздел в разработке"))
 		if view_id == "market":
 			_load_market_view()
+		elif view_id == "castle":
+			_load_castle_view()
+		elif view_id == "potions":
+			_load_potions_view()
+
+
+func _replace_central_box() -> VBoxContainer:
+	for child in _central_view_host.get_children():
+		child.queue_free()
+	var box := VBoxContainer.new()
+	_central_view_host.add_child(box)
+	return box
+
+
+func _load_castle_view() -> void:
+	if not _server_connected:
+		return
+	var box := _replace_central_box()
+	var title := Label.new()
+	title.text = "Замок игрока"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	box.add_child(title)
+	var status := Label.new()
+	status.text = "Загрузка состояния башен..."
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(status)
+	var response: Dictionary = await _server_client.get_castle()
+	if not is_instance_valid(status):
+		return
+	status.queue_free()
+	if not response.get("ok", false):
+		var failed := Label.new()
+		failed.text = "Не удалось загрузить замок"
+		box.add_child(failed)
+		return
+	var castle: Dictionary = response.get("data", {})
+	var tower: Dictionary = castle.get("buildings", {}).get("coin_tower", {})
+	var info := Label.new()
+	info.text = "Башня монет — уровень %d\nНакоплено: %d монет\nДоход: %d монет/час" % [
+		int(tower.get("level", 1)), int(tower.get("storedCoins", 0)), int(tower.get("level", 1)) * 100]
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(info)
+	var collect := Button.new()
+	collect.text = "Забрать доход"
+	collect.pressed.connect(_collect_castle_income)
+	box.add_child(collect)
+	var upgrade := Button.new()
+	upgrade.text = "Улучшить башню"
+	upgrade.pressed.connect(_upgrade_coin_tower)
+	box.add_child(upgrade)
+
+
+func _collect_castle_income() -> void:
+	var result: Dictionary = await _server_client.collect_castle_income()
+	if not result.get("ok", false):
+		add_log("[Замок] Не удалось забрать доход.")
+		return
+	_apply_server_profile(result.get("data", {}).get("player", {}))
+	add_log("[Замок] Доход забран.")
+	_load_castle_view()
+
+
+func _upgrade_coin_tower() -> void:
+	var result: Dictionary = await _server_client.upgrade_coin_tower()
+	if not result.get("ok", false):
+		add_log("[Замок] Недостаточно монет для улучшения.")
+		return
+	_apply_server_profile(result.get("data", {}).get("player", {}))
+	add_log("[Замок] Башня монет улучшена.")
+	_load_castle_view()
+
+
+func _load_potions_view() -> void:
+	if not _server_connected:
+		return
+	var box := _replace_central_box()
+	var title := Label.new()
+	title.text = "Башня зелий"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	box.add_child(title)
+	var description := Label.new()
+	description.text = "Создание зелья через сервер"
+	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(description)
+	var craft := Button.new()
+	craft.text = "Создать зелье"
+	craft.pressed.connect(_craft_potion)
+	box.add_child(craft)
+
+
+func _craft_potion() -> void:
+	var result: Dictionary = await _server_client.craft_potion()
+	if not result.get("ok", false):
+		add_log("[Зелья] Не удалось создать зелье.")
+		return
+	add_log("[Зелья] Зелье создано и сохранено на сервере.")
 
 
 func _load_market_view() -> void:
