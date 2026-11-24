@@ -102,7 +102,7 @@ async function handle(req, res) {
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/grant-demo-item') {
       const data = await body(req); const definition = state.itemDefinitions.find((x) => x.id === data.definitionId);
       if (!definition) return error(res, 404, 'Описание предмета не найдено');
-      const instance = { id: id(), definitionId: definition.id, name: definition.name, quality: Number(data.quality || definition.rarity), state: 'inventory' };
+      const instance = { id: id(), definitionId: definition.id, name: definition.name, baseCost: definition.baseCost, quality: Number(data.quality || definition.rarity), state: 'inventory' };
       player.inventory.push(instance); saveState(); return json(res, 201, instance);
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/market/listings') {

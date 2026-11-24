@@ -8,6 +8,8 @@ extends Control
 const PlayerDataS = preload("res://scripts/player_data.gd")
 const BotsControllerS = preload("res://scripts/bots_controller.gd")
 const SaveDataS = preload("res://scripts/save_data.gd")
+const GameFieldS = preload("res://scripts/game_field.gd")
+const ServerClientS = preload("res://scripts/server_client.gd")
 
 # ==================== ИГРОВОЕ ПОЛЕ ====================
 ## Сетка рисуется узлом GameField (scripts/game_field.gd):
@@ -22,6 +24,12 @@ var _save_state: Dictionary = {}
 var _inventory_list: VBoxContainer
 var _inventory_gold_label: Label
 var _auction_settled: bool = false
+## Ставки предыдущего завершённого раунда, доступные для отображения.
+var _revealed_round_bids: Dictionary = {}
+var _round_bids_visible: bool = false
+var _round_finished: bool = false
+var _auction_finished: bool = false
+const ROUND_PROTECTION: Array[float] = [2.0, 1.5, 1.3, 1.1, 1.0]
 
 # ==================== ВЫБОР ИГРОВОГО ПОЛЯ ====================
 ## Выбранное поле аукциона (GameData.FieldTier); -1 — пока не выбрано.
@@ -73,6 +81,8 @@ const EQUIP_SLOT_LABELS: Dictionary = {
 @onready var round_timer_label: Label = $MainHBox/CenterColumn/RoundInfoPanel/RoundInfoHBox/RoundTimerLabel
 @onready var round_defense_label: Label = $MainHBox/CenterColumn/RoundInfoPanel/RoundInfoHBox/DefenseLabel
 @onready var game_field = $MainHBox/CenterColumn/FieldHBox/GameFieldPanel/GameField
+@onready var game_field_panel: PanelContainer = $MainHBox/CenterColumn/FieldHBox/GameFieldPanel
+@onready var field_hbox: HBoxContainer = $MainHBox/CenterColumn/FieldHBox
 @onready var players_column: VBoxContainer = $MainHBox/CenterColumn/FieldHBox/PlayersColumn
 @onready var log_scroll: ScrollContainer = $MainHBox/RightColumn/LogPanel/LogVBox/LogScroll
 @onready var log_list: VBoxContainer = $MainHBox/RightColumn/LogPanel/LogVBox/LogScroll/LogList
@@ -81,9 +91,15 @@ const EQUIP_SLOT_LABELS: Dictionary = {
 @onready var calc_gold_label: Label = $MainHBox/RightColumn/CalcPanel/CalcVBox/CalcGoldLabel
 @onready var bid_button: Button = $MainHBox/RightColumn/CalcPanel/CalcVBox/BidButton
 @onready var main_hbox: HBoxContainer = $MainHBox
+@onready var center_column: VBoxContainer = $MainHBox/CenterColumn
+@onready var round_info_panel: PanelContainer = $MainHBox/CenterColumn/RoundInfoPanel
 
 ## Текущее выражение калькулятора (набирается кнопками).
 var calc_expression: String = ""
+var _calc_prefilled: bool = false
+var _central_view_host: PanelContainer
+var _active_central_view: String = "auction"
+var _server_client: Node
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -103,8 +119,33 @@ func _ready() -> void:
 	_setup_players()
 	_init_placeholders()
 	_setup_inventory_panel()
+	_setup_central_navigation()
 	_setup_field_selection()
 	_setup_calc()
+	_server_client = ServerClientS.new()
+	add_child(_server_client)
+	call_deferred("_sync_with_server")
+
+
+func _sync_with_server() -> void:
+	var profile = await _server_client.connect_guest()
+	if profile.is_empty():
+		add_log("[Сервер] Сервер недоступен — используется локальный режим.")
+		return
+	players[0].gold = maxi(int(profile.get("coins", players[0].gold)), 0)
+	inventory.clear()
+	for server_item: Variant in profile.get("inventory", []):
+		if server_item is Dictionary:
+			inventory.append({
+				"id": String(server_item.get("id", "")),
+				"title": String(server_item.get("name", "Предмет")),
+				"cost": int(server_item.get("baseCost", 0)),
+				"quality": int(server_item.get("quality", 1)),
+			})
+	SaveDataS.save_game(players[0].gold, inventory)
+	_update_player_labels()
+	_refresh_inventory()
+	add_log("[Сервер] Подключено: %s." % String(profile.get("login", "игрок")))
 
 
 # ============================================================
@@ -140,6 +181,54 @@ func _setup_inventory_panel() -> void:
 	box.add_child(_inventory_list)
 	$MainHBox/LeftColumn.add_child(panel)
 	_refresh_inventory()
+
+
+func _setup_central_navigation() -> void:
+	var navigation := PanelContainer.new()
+	navigation.name = "CentralNavigation"
+	var nav_row := HBoxContainer.new()
+	navigation.add_child(nav_row)
+	for view: Dictionary in [
+		{"id": "castle", "title": "Замок"},
+		{"id": "auction", "title": "Аукцион"},
+		{"id": "market", "title": "Рынок"},
+		{"id": "potions", "title": "Зелья"},
+	]:
+		var button := Button.new()
+		button.text = String(view["title"])
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(_show_central_view.bind(String(view["id"])))
+		nav_row.add_child(button)
+	center_column.add_child(navigation)
+	center_column.move_child(navigation, 0)
+
+	_central_view_host = PanelContainer.new()
+	_central_view_host.name = "CentralViewHost"
+	_central_view_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var label := Label.new()
+	label.name = "ViewLabel"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 28)
+	_central_view_host.add_child(label)
+	center_column.add_child(_central_view_host)
+	_central_view_host.visible = false
+
+
+func _show_central_view(view_id: String) -> void:
+	_active_central_view = view_id
+	var is_auction := view_id == "auction"
+	round_info_panel.visible = is_auction
+	field_hbox.visible = is_auction
+	_central_view_host.visible = not is_auction
+	if not is_auction:
+		var view_label: Label = _central_view_host.get_node("ViewLabel")
+		var titles := {
+			"castle": "Замок\n\nЗдесь будут башни, улучшения и пассивный доход.",
+			"market": "Рынок игроков\n\nЗдесь будут обычные объявления и легендарные аукционы.",
+			"potions": "Башня зелий\n\nЗдесь будут рецепты и производство зелий.",
+		}
+		view_label.text = String(titles.get(view_id, "Раздел в разработке"))
 
 
 func _refresh_inventory() -> void:
@@ -246,6 +335,8 @@ func _on_tier_selected(tier: int) -> void:
 	current_tier = tier
 	_tier_overlay.visible = false
 	main_hbox.visible = true
+	game_field_panel.visible = true
+	_show_central_view("auction")
 	# Боты тоже вошли на это поле — их золото не ниже порога входа.
 	for i: int in range(1, players.size()):
 		players[i].gold = maxi(players[i].gold, min_gold)
@@ -253,6 +344,9 @@ func _on_tier_selected(tier: int) -> void:
 	add_log("[Игра] Вы вошли на «%s» (вход от %d монет)." % [auction_field_name, min_gold])
 	_place_tier_items(int(info["lot_count"]))
 	_auction_settled = false
+	_auction_finished = false
+	_revealed_round_bids = {}
+	_round_bids_visible = false
 	set_field_round(1)
 	add_log("[Игра] Раунд 1: местоположение предметов скрыто...")
 	add_log("[Игра] Стартовое золото: %d" % players[0].gold)
@@ -389,7 +483,7 @@ func _place_tier_items(count: int) -> void:
 	for info: Dictionary in picked:
 		var item_size: Vector2i = info["size"]
 		# Предмет не влезает по ширине — переносим на новую полку.
-		if col + item_size.x > 30:
+		if col + item_size.x > GameFieldS.FIELD_COLS:
 			col = 0
 			shelf_y += shelf_h + 1
 			shelf_h = 0
@@ -412,9 +506,9 @@ func _place_tier_items(count: int) -> void:
 ## Добавляет предмет в пул: размер w × h клеток, угол — (row, col).
 func add_field_item(row: int, col: int, w: int, h: int, title: String,
 		color: Color = Color(0.60, 0.60, 0.70)) -> void:
-	w = clampi(w, 1, 30)
+	w = clampi(w, 1, GameFieldS.FIELD_COLS)
 	h = maxi(h, 1)
-	col = clampi(col, 0, 30 - w)
+	col = clampi(col, 0, GameFieldS.FIELD_COLS - w)
 	field_items.append({"row": row, "col": col, "w": w, "h": h, "title": title, "color": color})
 	rebuild_field()
 
@@ -430,6 +524,7 @@ func set_field_name(value: String) -> void:
 ## показывает коэффициент защиты ставки. Таймер раунда перезапускается.
 func set_field_round(value: int) -> void:
 	_field_round = clampi(value, 1, 5)
+	_round_finished = false
 	game_field.reveal_for_round(_field_round)
 	update_round_info_from_state(auction_field_name, _field_round)
 	set_news("Раунд %d — смотрите на поле и делайте ставки!" % _field_round)
@@ -439,7 +534,9 @@ func set_field_round(value: int) -> void:
 	var prev_bid: int = players[0].last_bid
 	for p: PlayerDataS in players:
 		p.last_bid = 0
+		p.has_acted = false
 	_prefill_calc(prev_bid)
+	_update_player_labels()
 	_schedule_bot_bids()
 
 
@@ -485,19 +582,33 @@ func _on_round_time_expired() -> void:
 ## Завершает текущий раунд: досрочно (все сделали ставки) или по таймеру.
 ## После 5-го раунда аукцион завершается.
 func _advance_round() -> void:
+	if _round_finished or _auction_finished:
+		return
+	_round_finished = true
+	_reveal_round_bids()
 	if _field_round >= 5:
 		_round_timer.stop()
 		_settle_auction()
 		set_news("Аукцион завершён! Итоги подведены.")
 		add_log("[Игра] Раунд 5 завершён — аукцион окончен!")
+		_show_field_selection_in_game_area()
 		return
 	set_field_round(_field_round + 1)
+
+
+func _reveal_round_bids() -> void:
+	_revealed_round_bids = {}
+	for p: PlayerDataS in players:
+		_revealed_round_bids[p.id] = p.last_bid
+	_round_bids_visible = true
+	_update_player_labels()
 
 
 func _settle_auction() -> void:
 	if _auction_settled:
 		return
 	_auction_settled = true
+	_auction_finished = true
 	var winner := -1
 	var winning_bid := 0
 	for p: PlayerDataS in players:
@@ -515,9 +626,25 @@ func _settle_auction() -> void:
 			"size": "%dx%d" % [int(item.get("w", 1)), int(item.get("h", 1))],
 		})
 	SaveDataS.save_game(players[0].gold, inventory)
-	add_log("[Победа] Вы выиграли %d предмет(ов) за %d монет." % [field_items.size(), winning_bid])
+	add_log("[Победа] Вы выиграли %d предмет(ов)." % field_items.size())
 	_update_player_labels()
 	_refresh_inventory()
+
+
+func _show_field_selection_in_game_area() -> void:
+	_round_timer.stop()
+	game_field_panel.visible = false
+	main_hbox.visible = true
+	if _tier_overlay.get_parent() != field_hbox:
+		_tier_overlay.get_parent().remove_child(_tier_overlay)
+		field_hbox.add_child(_tier_overlay)
+	_tier_overlay.layout_mode = 2
+	_tier_overlay.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tier_overlay.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_tier_overlay.custom_minimum_size = Vector2.ZERO
+	_tier_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_tier_overlay.visible = true
+	_refresh_tier_buttons()
 
 
 func _player_name(player_id: int) -> String:
@@ -530,7 +657,7 @@ func _player_name(player_id: int) -> String:
 ## Все игроки поставили — новый раунд начинается, не дожидаясь таймера.
 func _check_all_bid() -> void:
 	for p: PlayerDataS in players:
-		if p.last_bid <= 0:
+		if not p.has_acted:
 			return
 	add_log("[Игра] Все игроки сделали ставки — начинается раунд %d!" % [
 		_field_round + 1])
@@ -540,6 +667,7 @@ func _check_all_bid() -> void:
 ## Подставляет предыдущую ставку игрока в калькулятор.
 func _prefill_calc(prev_bid: int) -> void:
 	calc_expression = str(maxi(prev_bid, 0))
+	_calc_prefilled = true
 	calc_display.text = calc_expression
 
 
@@ -579,8 +707,9 @@ func _setup_players() -> void:
 		players.append(bot)
 	for i: int in players.size():
 		var row: HBoxContainer = players_column.get_node(NodePath("PlayerRow%d" % i))
-		var avatar: TextureRect = row.get_node(NodePath("Avatar"))
-		avatar.texture = load(players[i].avatar_path)
+		var avatar: PanelContainer = row.get_node(NodePath("Avatar"))
+		var avatar_icon: TextureRect = avatar.get_node(NodePath("Icon"))
+		avatar_icon.texture = load(players[i].avatar_path)
 		var name_label: Label = row.get_node(NodePath("Info/NameLabel"))
 		name_label.text = players[i].player_name
 	_update_player_labels()
@@ -592,9 +721,33 @@ func _update_player_labels() -> void:
 	for i: int in players.size():
 		var row: HBoxContainer = players_column.get_node(NodePath("PlayerRow%d" % i))
 		var bid_label: Label = row.get_node(NodePath("Info/BidLabel"))
+		var avatar: PanelContainer = row.get_node(NodePath("Avatar"))
 		var p: PlayerDataS = players[i]
-		bid_label.text = str(p.last_bid) if p.last_bid > 0 else "—"
+		if _round_bids_visible:
+			var previous_bid: int = int(_revealed_round_bids.get(p.id, 0))
+			bid_label.text = "Ставка: %d" % previous_bid if previous_bid > 0 else "Пас"
+		else:
+			if p.last_bid > 0:
+				bid_label.text = "Готов"
+			else:
+				bid_label.text = "Пас" if p.has_acted else "Ожидание"
+		_set_bid_frame(avatar, p.last_bid > 0)
 	calc_gold_label.text = "Ваше золото: %d" % players[0].gold
+
+
+func _set_bid_frame(avatar: PanelContainer, active: bool) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.18, 0.14, 1.0)
+	style.border_width_left = 3 if active else 0
+	style.border_width_top = 3 if active else 0
+	style.border_width_right = 3 if active else 0
+	style.border_width_bottom = 3 if active else 0
+	style.border_color = Color(0.20, 0.95, 0.35, 1.0)
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	avatar.add_theme_stylebox_override("panel", style)
 
 
 ## Боты делают ставки в течение раунда: оценивают лот по открытым
@@ -607,24 +760,52 @@ func _schedule_bot_bids() -> void:
 			continue
 		p.last_bid = 0
 		p.last_estimate = estimate
-		var delay: float = _bot_rng.randf_range(3.0, 35.0)
+		var delay: float = _bot_rng.randf_range(0.5, 5.0)
 		get_tree().create_timer(delay).timeout.connect(_bot_place_bid.bind(p, _field_round))
 	_update_player_labels()
 
 
 ## Ставка конкретного бота (если раунд к моменту тика не сменился).
 func _bot_place_bid(bot: PlayerDataS, round_at_schedule: int) -> void:
-	if round_at_schedule != _field_round or bot.last_bid > 0:
+	if _auction_finished or round_at_schedule != _field_round or bot.has_acted:
 		return
 	bot.last_bid = BotsControllerS.bot_bid(
 			bot.last_estimate, _field_round, bot.gold, bot.aggression, _bot_rng)
+	bot.has_acted = true
 	if bot.last_bid > 0:
-		add_log("[%s] ставка: %d монет (оценка лота %d)" % [
-			bot.player_name, bot.last_bid, bot.last_estimate])
+		add_log("[%s] сделал ставку." % bot.player_name)
 	else:
 		add_log("[%s] пасует в этом раунде" % bot.player_name)
 	_update_player_labels()
+	if _check_early_victory(bot.id):
+		return
 	_check_all_bid()
+
+
+func _check_early_victory(player_id: int) -> bool:
+	if _auction_finished or _field_round < 1 or _field_round > ROUND_PROTECTION.size():
+		return false
+	var player_bid := 0
+	var highest_other := 0
+	for p: PlayerDataS in players:
+		if p.id == player_id:
+			player_bid = p.last_bid
+		elif p.last_bid > highest_other:
+			highest_other = p.last_bid
+	if player_bid <= 0 or highest_other <= 0:
+		return false
+	var threshold := int(ceil(float(highest_other) * ROUND_PROTECTION[_field_round - 1]))
+	if player_bid <= threshold:
+		return false
+	_round_finished = true
+	_reveal_round_bids()
+	_round_timer.stop()
+	_auction_finished = true
+	set_news("Досрочная победа — ставка превысила защитный порог!")
+	add_log("[Игра] %s досрочно выиграл аукцион." % _player_name(player_id))
+	_settle_auction()
+	_show_field_selection_in_game_area()
+	return true
 
 
 # ============================================================
@@ -641,10 +822,14 @@ func _on_calc_button_pressed(symbol: String) -> void:
 	match symbol:
 		"C":
 			calc_expression = ""
+			_calc_prefilled = false
 			calc_display.text = "0"
 		"=":
 			_calc_evaluate()
 		_:
+			if _calc_prefilled:
+				calc_expression = ""
+				_calc_prefilled = false
 			calc_expression += symbol
 			calc_display.text = calc_expression
 
@@ -689,17 +874,30 @@ func _calc_result() -> int:
 ## ставкой текущего игрока. Повторная ставка в раунде запрещена.
 func _on_bid_button_pressed() -> void:
 	var player: PlayerDataS = players[0]
+	if _auction_finished:
+		add_log("[Игра] Аукцион уже завершён")
+		return
 	if player.last_bid > 0:
 		add_log("[Игра] Вы уже сделали ставку в этом раунде")
 		return
 	var value := _calc_result()
-	if value <= 0:
-		add_log("[Игра] Наберите сумму ставки в калькуляторе (например 150)")
+	if value < 0:
+		add_log("[Игра] Введите ставку или оставьте 0 для паса")
+		return
+	if value == 0:
+		player.last_bid = 0
+		player.has_acted = true
+		add_log("[Вы] пас в этом раунде")
+		_update_player_labels()
+		_check_all_bid()
 		return
 	var amount: int = clampi(value, 1, player.gold)
 	if amount < value:
-		add_log("[Игра] Ставка урезана до вашего золота: %d" % amount)
+		add_log("[Игра] Ставка ограничена доступным балансом.")
 	player.last_bid = amount
-	add_log("[Вы] ставка: %d монет" % amount)
+	player.has_acted = true
+	add_log("[Вы] сделал ставку.")
 	_update_player_labels()
+	if _check_early_victory(player.id):
+		return
 	_check_all_bid()
