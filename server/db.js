@@ -28,4 +28,23 @@ async function withTransaction(pool, callback) {
   } finally { client.release(); }
 }
 
-module.exports = { createPool, checkConnection, withTransaction };
+async function ensureRuntimeTable(pool) {
+  await pool.query(`CREATE TABLE IF NOT EXISTS runtime_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    state JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+}
+
+async function loadRuntimeState(pool) {
+  const result = await pool.query('SELECT state FROM runtime_state WHERE id = 1');
+  return result.rows[0]?.state || null;
+}
+
+async function saveRuntimeState(pool, state) {
+  await pool.query(`INSERT INTO runtime_state (id, state, updated_at)
+    VALUES (1, $1::jsonb, now())
+    ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`, [JSON.stringify(state)]);
+}
+
+module.exports = { createPool, checkConnection, withTransaction, ensureRuntimeTable, loadRuntimeState, saveRuntimeState };

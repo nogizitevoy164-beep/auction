@@ -122,3 +122,9 @@ CREATE TABLE transactions (
     reference_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE runtime_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    state JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
