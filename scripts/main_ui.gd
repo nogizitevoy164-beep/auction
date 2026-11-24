@@ -644,8 +644,7 @@ func _load_catalog_view() -> void:
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(scroll)
 	var grid := GridContainer.new()
-	var available_width: float = maxf(_central_view_host.size.x, 340.0)
-	grid.columns = clampi(int((available_width + 6.0) / 176.0), 1, 8)
+	grid.columns = 3
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
@@ -706,7 +705,7 @@ func _merge_catalog_items(local_items: Array, server_items: Variant) -> Array:
 
 func _catalog_card(item: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(170, 108)
+	card.custom_minimum_size = Vector2(0, 108)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var quality := clampi(int(item.get("quality", item.get("rarity", 1))), 1, 5)
 	var quality_color: Color = GameData.QUALITY_COLORS[quality]
