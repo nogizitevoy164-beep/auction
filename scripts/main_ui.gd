@@ -631,13 +631,11 @@ func _load_catalog_view() -> void:
 	status.text = "Загрузка каталога..."
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(status)
-	var items: Array = []
+	var items: Array = _local_catalog_items()
 	if _server_connected:
 		var response: Dictionary = await _server_client.get_catalog_items()
 		if response.get("ok", false):
-			items = response.get("data", {}).get("items", [])
-	if items.is_empty():
-		items = _local_catalog_items()
+			items = _merge_catalog_items(items, response.get("data", {}).get("items", []))
 	if not is_instance_valid(status):
 		return
 	status.queue_free()
@@ -666,19 +664,62 @@ func _local_catalog_items() -> Array:
 		item["baseCost"] = int(item.get("cost", 0))
 		result.append(item)
 	for gear_id: String in GameData.GEAR_CLASSES:
-		var gear: Dictionary = GameData.GEAR_CLASSES[gear_id].duplicate(true)
-		gear["id"] = gear_id
-		gear["type"] = "equipment"
-		gear["rarity"] = int(gear.get("quality", 1))
-		gear["baseCost"] = int(gear.get("cost", 0))
-		gear["description"] = String(gear.get("ability", ""))
-		result.append(gear)
+		for quality: int in range(1, 6):
+			var gear: Dictionary = GameData.GEAR_CLASSES[gear_id].duplicate(true)
+			var equip: EquipmentData = EquipmentData.make(gear_id, quality)
+			gear["id"] = "%s_q%d" % [gear_id, quality]
+			gear["baseId"] = gear_id
+			gear["type"] = "equipment"
+			gear["quality"] = quality
+			gear["rarity"] = quality
+			gear["baseCost"] = int(gear.get("base_cost", 0))
+			gear["iconPath"] = String(gear.get("icon_path", ""))
+			gear["description"] = equip.ability_description()
+			gear["properties"] = "Слот: %s\nРазмер: %dx%d" % [
+				GameData.SLOT_NAMES[equip.slot()], equip.size_x, equip.size_y]
+			result.append(gear)
 	return result
+
+
+func _merge_catalog_items(local_items: Array, server_items: Variant) -> Array:
+	var merged: Array = local_items.duplicate(true)
+	var indexes: Dictionary = {}
+	for index: int in merged.size():
+		indexes[String(merged[index].get("id", ""))] = index
+	if server_items is Array:
+		for server_item: Variant in server_items:
+			if not server_item is Dictionary:
+				continue
+			var server_id := String(server_item.get("id", ""))
+			# Серверные базовые записи экипировки заменяются локальными
+			# вариантами q1..q5, чтобы в каталоге были все качества.
+			if GameData.GEAR_CLASSES.has(server_id):
+				continue
+			if indexes.has(server_id):
+				merged[int(indexes[server_id])] = server_item
+			else:
+				indexes[server_id] = merged.size()
+				merged.append(server_item)
+	return merged
 
 
 func _catalog_card(item: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(300, 150)
+	card.custom_minimum_size = Vector2(250, 150)
+	var quality := clampi(int(item.get("quality", item.get("rarity", 1))), 1, 5)
+	var quality_color: Color = GameData.QUALITY_COLORS[quality]
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.10, 0.09, 0.14, 0.96)
+	card_style.border_width_left = 3
+	card_style.border_width_top = 3
+	card_style.border_width_right = 3
+	card_style.border_width_bottom = 3
+	card_style.border_color = quality_color
+	var shadow_color := quality_color
+	shadow_color.a = 0.72
+	card_style.shadow_color = shadow_color
+	card_style.shadow_size = 10
+	card.add_theme_stylebox_override("panel", card_style)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 10)
 	margin.add_theme_constant_override("margin_top", 8)
@@ -700,7 +741,7 @@ func _catalog_card(item: Dictionary) -> PanelContainer:
 	info.add_child(name_label)
 	var meta := Label.new()
 	meta.text = "Тип: %s | Качество: %s | Стоимость: %d монет" % [
-		String(item.get("type", "предмет")), _catalog_rarity_name(int(item.get("rarity", item.get("quality", 1)))),
+		String(item.get("type", "предмет")), _catalog_rarity_name(quality),
 		int(item.get("baseCost", item.get("cost", 0)))]
 	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info.add_child(meta)
