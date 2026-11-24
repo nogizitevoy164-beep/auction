@@ -4,7 +4,9 @@ extends Node
 ## При недоступном сервере клиент может продолжить локальную игру.
 
 const SESSION_PATH := "user://auction_server_session.json"
-var base_url: String = "http://127.0.0.1:8080"
+## Production server. For local development this can be changed to
+## http://127.0.0.1:8080 in the Godot editor or in a derived client.
+var base_url: String = "https://www.arh.seaetr.online"
 var token: String = ""
 var _socket: WebSocketPeer
 
@@ -80,8 +82,16 @@ func start_realtime() -> void:
 	if _socket != null:
 		return
 	_socket = WebSocketPeer.new()
-	_socket.connect_to_url(base_url.replace("http://", "ws://") + "/ws")
+	_socket.connect_to_url(_websocket_url() + "/ws")
 	set_process(true)
+
+
+func _websocket_url() -> String:
+	if base_url.begins_with("https://"):
+		return "wss://" + base_url.trim_prefix("https://")
+	if base_url.begins_with("http://"):
+		return "ws://" + base_url.trim_prefix("http://")
+	return base_url
 
 
 func _process(_delta: float) -> void:
