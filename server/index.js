@@ -73,7 +73,22 @@ function addNews(title, message, type = 'market') {
   state.news = state.news.slice(0, 100);
 }
 
+function expireListings() {
+  const now = Date.now(); let changed = false;
+  for (const seller of state.players) {
+    for (const listing of seller.listings || []) {
+      if (listing.status !== 'active' || Date.parse(listing.expiresAt) > now) continue;
+      listing.status = 'expired';
+      const item = seller.inventory.find((x) => x.id === listing.instanceId);
+      if (item) item.state = 'inventory';
+      changed = true;
+    }
+  }
+  if (changed) saveState();
+}
+
 async function handle(req, res) {
+  expireListings();
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const parts = url.pathname.split('/').filter(Boolean);
   try {
