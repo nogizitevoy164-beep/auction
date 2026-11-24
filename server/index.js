@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const { hashPassword, verifyPassword } = require('./auth');
-const { createPool } = require('./db');
+const { createPool, checkConnection } = require('./db');
 
 const PORT = Number(process.env.PORT || 8080);
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dev-admin-key';
@@ -141,7 +141,7 @@ async function handle(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const parts = url.pathname.split('/').filter(Boolean);
   try {
-    if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, serverId: 1, playersOnline: state.players.length });
+    if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, serverId: 1, playersOnline: state.players.length, storage: postgres ? 'postgresql-configured' : 'json' });
     if (req.method === 'GET' && url.pathname === '/admin') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'admin.html')));
@@ -260,5 +260,8 @@ websocket.on('connection', (socket) => {
   socket.send(JSON.stringify({ type: 'news_snapshot', payload: state.news }));
   socket.on('close', () => sockets.delete(socket));
 });
-server.listen(PORT, () => console.log(`Auction server listening on http://127.0.0.1:${PORT}`));
+server.listen(PORT, async () => {
+  console.log(`Auction server listening on http://127.0.0.1:${PORT}`);
+  if (postgres) console.log(`PostgreSQL connection: ${await checkConnection(postgres).catch(() => false) ? 'ok' : 'failed'}`);
+});
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
