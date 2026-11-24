@@ -250,6 +250,28 @@ const GEAR_CLASSES: Dictionary = {
 		"base_cost": 2000,
 		"icon_path": "res://icons/boots_wizard.svg",
 	},
+	# ---------- ОРУЖИЕ ----------
+	"weapon_dagger_assassin": {
+		"title": "Кинжал ассасина",
+		"slot": EquipSlot.WEAPON,
+		"size": Vector2i(1, 2),
+		"abilities": [],
+		"base_cost": 2500,
+	},
+	"weapon_sword_warrior": {
+		"title": "Меч воина",
+		"slot": EquipSlot.WEAPON,
+		"size": Vector2i(1, 4),
+		"abilities": [],
+		"base_cost": 3000,
+	},
+	"weapon_staff_mage": {
+		"title": "Посох мага",
+		"slot": EquipSlot.WEAPON,
+		"size": Vector2i(1, 4),
+		"abilities": [],
+		"base_cost": 3200,
+	},
 }
 
 # ============================================================
