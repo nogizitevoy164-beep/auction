@@ -6,6 +6,9 @@ extends Node
 const SESSION_PATH := "user://auction_server_session.json"
 var base_url: String = "http://127.0.0.1:8080"
 var token: String = ""
+var _socket: WebSocketPeer
+
+signal server_event(event_type: String, payload: Variant)
 
 
 func connect_guest() -> Dictionary:
@@ -71,6 +74,25 @@ func upgrade_coin_tower() -> Dictionary:
 
 func craft_potion() -> Dictionary:
 	return await _request_json("/api/v1/potions/craft", HTTPClient.METHOD_POST, {})
+
+
+func start_realtime() -> void:
+	if _socket != null:
+		return
+	_socket = WebSocketPeer.new()
+	_socket.connect_to_url(base_url.replace("http://", "ws://") + "/ws")
+	set_process(true)
+
+
+func _process(_delta: float) -> void:
+	if _socket == null:
+		return
+	_socket.poll()
+	while _socket.get_available_packet_count() > 0:
+		var raw := (_socket.get_packet() as PackedByteArray).get_string_from_utf8()
+		var parsed: Variant = JSON.parse_string(raw)
+		if parsed is Dictionary:
+			server_event.emit(String(parsed.get("type", "")), parsed.get("payload", {}))
 
 
 func get_legendary_auctions() -> Dictionary:

@@ -135,6 +135,8 @@ func _sync_with_server() -> void:
 		return
 	_server_connected = true
 	_apply_server_profile(profile)
+	_server_client.server_event.connect(_on_server_event)
+	_server_client.start_realtime()
 	add_log("[Сервер] Подключено: %s." % String(profile.get("login", "игрок")))
 
 
@@ -152,6 +154,14 @@ func _apply_server_profile(profile: Dictionary) -> void:
 	SaveDataS.save_game(players[0].gold, inventory)
 	_update_player_labels()
 	_refresh_inventory()
+
+
+func _on_server_event(event_type: String, payload: Variant) -> void:
+	if event_type == "news_created" and payload is Dictionary:
+		set_news(String(payload.get("message", "Новое серверное событие")))
+		add_log("[Новости] %s" % String(payload.get("title", "Новость сервера")))
+	elif event_type == "catalog_updated":
+		add_log("[Сервер] Каталог предметов обновлён администратором.")
 
 
 # ============================================================
