@@ -225,12 +225,18 @@ func _setup_inventory_panel() -> void:
 
 
 func _setup_role_selector() -> void:
+	# Селектор роли вынесен в отдельную панель, чтобы не менять высоту
+	# растягиваемой панели персонажа и не ломать расчёт контейнеров.
+	var selector_panel := PanelContainer.new()
+	selector_panel.name = "RoleSelectorPanel"
+	selector_panel.custom_minimum_size = Vector2(0, 36)
 	_role_selector = HBoxContainer.new()
 	_role_selector.name = "RoleSelector"
 	_role_selector.alignment = BoxContainer.ALIGNMENT_CENTER
 	_role_selector.add_theme_constant_override("separation", 4)
-	$MainHBox/LeftColumn/CharacterPanel/CharacterVBox.add_child(_role_selector)
-	$MainHBox/LeftColumn/CharacterPanel/CharacterVBox.move_child(_role_selector, 1)
+	selector_panel.add_child(_role_selector)
+	$MainHBox/LeftColumn.add_child(selector_panel)
+	$MainHBox/LeftColumn.move_child(selector_panel, 0)
 	for role_id: String in ROLE_DATA:
 		var role_button := Button.new()
 		role_button.text = String(ROLE_DATA[role_id]["title"])
