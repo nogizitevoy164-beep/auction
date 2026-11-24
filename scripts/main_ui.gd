@@ -11,6 +11,12 @@ const SaveDataS = preload("res://scripts/save_data.gd")
 const GameFieldS = preload("res://scripts/game_field.gd")
 const ServerClientS = preload("res://scripts/server_client.gd")
 
+const ROLE_DATA: Dictionary = {
+	"mage": {"title": "Маг", "portrait": "res://icons/silhouette_mage.svg"},
+	"warrior": {"title": "Воин", "portrait": "res://icons/silhouette_warrior.svg"},
+	"assassin": {"title": "Ассасин", "portrait": "res://icons/silhouette_assassin.svg"},
+}
+
 # ==================== ИГРОВОЕ ПОЛЕ ====================
 ## Сетка рисуется узлом GameField (scripts/game_field.gd):
 ## клетка = ширина поля / 30, поэтому клетки всегда квадратные;
@@ -23,6 +29,9 @@ var inventory: Array[Dictionary] = []
 var _save_state: Dictionary = {}
 var _inventory_list: VBoxContainer
 var _inventory_gold_label: Label
+var _role_selector: HBoxContainer
+var _selected_role: String = "warrior"
+var _equipped_items: Dictionary = {}
 var _auction_settled: bool = false
 ## Ставки предыдущего завершённого раунда, доступные для отображения.
 var _revealed_round_bids: Dictionary = {}
@@ -118,6 +127,7 @@ func _ready() -> void:
 	_setup_round_timer()
 	_save_state = SaveDataS.load_game()
 	_setup_players()
+	_setup_role_selector()
 	_init_placeholders()
 	_setup_inventory_panel()
 	_setup_central_navigation()
@@ -143,16 +153,28 @@ func _sync_with_server() -> void:
 func _apply_server_profile(profile: Dictionary) -> void:
 	players[0].gold = maxi(int(profile.get("coins", players[0].gold)), 0)
 	inventory.clear()
+	_equipped_items.clear()
 	for server_item: Variant in profile.get("inventory", []):
 		if server_item is Dictionary:
-			inventory.append({
+			var item := {
 				"id": String(server_item.get("id", "")),
-				"title": String(server_item.get("name", "Предмет")),
-				"cost": int(server_item.get("baseCost", 0)),
+				"title": String(server_item.get("name", server_item.get("title", "Предмет"))),
+				"cost": int(server_item.get("baseCost", server_item.get("cost", 0))),
 				"quality": int(server_item.get("quality", 1)),
-			})
+				"gear_class_id": String(server_item.get("gearClassId", server_item.get("gear_class_id", ""))),
+				"state": String(server_item.get("state", "inventory")),
+			}
+			if item["state"] == "equipped":
+				var server_slot := String(server_item.get("slot", ""))
+				if server_slot.is_empty():
+					server_slot = String(profile.get("equipment", {}).find_key(String(server_item.get("id", ""))))
+				if not server_slot.is_empty():
+					_equipped_items[server_slot] = item
+			else:
+				inventory.append(item)
 	SaveDataS.save_game(players[0].gold, inventory)
 	_update_player_labels()
+	_refresh_equipment_slots()
 	_refresh_inventory()
 
 
@@ -171,7 +193,7 @@ func _init_placeholders() -> void:
 	set_character_name("Аукционер Морган")
 	for slot_node_name: String in EQUIP_SLOT_LABELS:
 		set_equipment(slot_node_name, "—")
-	_init_demo_equipment()
+	_update_role_portrait()
 	set_news("Выберите аукционное поле, чтобы начать!")
 	set_field_name("—")
 	add_log("[Игра] Добро пожаловать на магический аукцион!")
@@ -197,6 +219,123 @@ func _setup_inventory_panel() -> void:
 	box.add_child(_inventory_list)
 	$MainHBox/LeftColumn.add_child(panel)
 	_refresh_inventory()
+
+
+func _setup_role_selector() -> void:
+	_role_selector = HBoxContainer.new()
+	_role_selector.name = "RoleSelector"
+	_role_selector.alignment = BoxContainer.ALIGNMENT_CENTER
+	_role_selector.add_theme_constant_override("separation", 4)
+	$MainHBox/LeftColumn/CharacterPanel/CharacterVBox.add_child(_role_selector)
+	$MainHBox/LeftColumn/CharacterPanel/CharacterVBox.move_child(_role_selector, 1)
+	for role_id: String in ROLE_DATA:
+		var role_button := Button.new()
+		role_button.text = String(ROLE_DATA[role_id]["title"])
+		role_button.tooltip_text = "Выбрать роль: %s" % role_button.text
+		role_button.toggle_mode = true
+		role_button.button_pressed = role_id == _selected_role
+		role_button.pressed.connect(_select_role.bind(role_id))
+		_role_selector.add_child(role_button)
+
+
+func _select_role(role_id: String) -> void:
+	if not ROLE_DATA.has(role_id):
+		return
+	_selected_role = role_id
+	for button: Button in _role_selector.get_children():
+		button.button_pressed = button.text == String(ROLE_DATA[role_id]["title"])
+	_update_role_portrait()
+	add_log("[Персонаж] Выбрана роль: %s." % ROLE_DATA[role_id]["title"])
+
+
+func _update_role_portrait() -> void:
+	if character_portrait == null:
+		return
+	character_portrait.texture = load(String(ROLE_DATA[_selected_role]["portrait"]))
+	character_portrait.tooltip_text = "Роль: %s" % ROLE_DATA[_selected_role]["title"]
+
+
+func _gear_id_for_item(item: Dictionary) -> String:
+	var explicit_id := String(item.get("gear_class_id", item.get("gearClassId", "")))
+	if GameData.GEAR_CLASSES.has(explicit_id):
+		return explicit_id
+	var title := String(item.get("title", item.get("name", "")))
+	for gear_id: String in GameData.GEAR_CLASSES:
+		if String(GameData.GEAR_CLASSES[gear_id]["title"]) == title:
+			return gear_id
+	return ""
+
+
+func _is_equipment_item(item: Dictionary) -> bool:
+	return not _gear_id_for_item(item).is_empty()
+
+
+func _equipment_for_item(item: Dictionary) -> EquipmentData:
+	var gear_id := _gear_id_for_item(item)
+	if gear_id.is_empty():
+		return null
+	var equip := EquipmentData.make(gear_id, clampi(int(item.get("quality", GameData.Quality.COMMON)), 1, 5))
+	equip.item_name = String(item.get("title", item.get("name", equip.item_name)))
+	equip.cost = int(item.get("cost", item.get("baseCost", equip.cost)))
+	return equip
+
+
+func _slot_node_for_equipment(equip: EquipmentData) -> String:
+	var slot := equip.slot()
+	for node_name: String in EQUIP_SLOT_LABELS:
+		var slot_name := EQUIP_SLOT_LABELS[node_name]
+		if slot_name == String(GameData.SLOT_NAMES[slot]):
+			return node_name
+	return ""
+
+
+func _equipment_description(item: Dictionary) -> String:
+	var equip := _equipment_for_item(item)
+	if equip == null:
+		return ""
+	return "%s\nКачество: %s\nСлот: %s\nСтоимость: %d монет\n%s" % [
+		equip.item_name, equip.quality_name(), GameData.SLOT_NAMES[equip.slot()], equip.cost,
+		equip.ability_description() if not equip.ability_description().is_empty() else "Особых свойств нет"]
+
+
+func _equip_inventory_item(index: int) -> void:
+	if index < 0 or index >= inventory.size():
+		return
+	var item: Dictionary = inventory[index]
+	var equip := _equipment_for_item(item)
+	if equip == null:
+		return
+	var slot_node := _slot_node_for_equipment(equip)
+	if slot_node.is_empty():
+		return
+	if _server_connected and not String(item.get("id", "")).is_empty():
+		var response := await _server_client.equip_item(String(item["id"]), slot_node)
+		if not response.get("ok", false):
+			add_log("[Экипировка] Не удалось надеть предмет.")
+			return
+		_apply_server_profile(response.get("data", {}))
+		add_log("[Экипировка] Надет предмет «%s»." % equip.item_name)
+		return
+	var previous: Variant = _equipped_items.get(slot_node, null)
+	if previous is Dictionary:
+		inventory.append(previous.duplicate(true))
+	inventory.remove_at(index)
+	_equipped_items[slot_node] = item.duplicate(true)
+	SaveDataS.save_game(players[0].gold, inventory)
+	_refresh_equipment_slots()
+	_refresh_inventory()
+	add_log("[Экипировка] Надет предмет «%s»." % equip.item_name)
+
+
+func _refresh_equipment_slots() -> void:
+	for slot_node: String in EQUIP_SLOT_LABELS:
+		var item: Variant = _equipped_items.get(slot_node, null)
+		if item is Dictionary:
+			var equip := _equipment_for_item(item)
+			if equip != null:
+				set_equipment_item(slot_node, equip)
+				continue
+		set_equipment(slot_node, "—")
 
 
 func _setup_central_navigation() -> void:
@@ -477,10 +616,18 @@ func _refresh_inventory() -> void:
 		var item: Dictionary = inventory[index]
 		var row := HBoxContainer.new()
 		var label := Label.new()
-		label.text = "%s — %d" % [item.get("title", "Предмет"), int(item.get("cost", 0))]
+		var is_gear := _is_equipment_item(item)
+		label.text = "%s — %d%s" % [item.get("title", "Предмет"), int(item.get("cost", item.get("baseCost", 0))), " (снаряжение)" if is_gear else ""]
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(label)
+		row.tooltip_text = _equipment_description(item) if is_gear else "Предмет для продажи\nСтоимость: %d монет" % int(item.get("cost", item.get("baseCost", 0)))
+		if is_gear:
+			var equip_button := Button.new()
+			equip_button.text = "Одеть"
+			equip_button.tooltip_text = "Надеть предмет в слот: %s" % GameData.SLOT_NAMES[_equipment_for_item(item).slot()]
+			equip_button.pressed.connect(_equip_inventory_item.bind(index))
+			row.add_child(equip_button)
 		var sell := Button.new()
 		sell.text = "Продать %d" % SaveDataS.sell_price(item)
 		sell.pressed.connect(_sell_inventory_item.bind(index))
@@ -656,9 +803,13 @@ func update_round_info_from_state(field_name: String, current_round: int) -> voi
 ## slot_node_name — один из ключей EQUIP_SLOT_LABELS (например "SlotWeapon").
 ## Ставит строку-заглушку (имя слота + текст).
 func set_equipment(slot_node_name: String, item: String) -> void:
-	var label: Label = equipment_list.get_node(NodePath(slot_node_name + "/Text"))
+	var slot: HBoxContainer = equipment_list.get_node(NodePath(slot_node_name))
+	var icon: TextureRect = slot.get_node(NodePath("Icon"))
+	icon.texture = null
+	var label: Label = slot.get_node(NodePath("Text"))
 	label.text = "%s: %s" % [EQUIP_SLOT_LABELS[slot_node_name], item]
 	label.modulate = Color.WHITE
+	slot.tooltip_text = "Пустой слот: %s" % EQUIP_SLOT_LABELS[slot_node_name]
 
 
 ## Ставит предмет снаряжения в слот: иконка + название + цвет качества.
@@ -670,6 +821,9 @@ func set_equipment_item(slot_node_name: String, equip: EquipmentData) -> void:
 	label.text = "%s: %s (%s)" % [
 		EQUIP_SLOT_LABELS[slot_node_name], equip.item_name, equip.quality_name()]
 	label.modulate = equip.quality_color()
+	slot.tooltip_text = "%s\nКачество: %s\nСлот: %s\nСтоимость: %d монет\n%s" % [
+		equip.item_name, equip.quality_name(), GameData.SLOT_NAMES[equip.slot()], equip.cost,
+		equip.ability_description() if not equip.ability_description().is_empty() else "Особых свойств нет"]
 
 
 ## Демо: заполняет панель экипировки из ресурсов .tres
