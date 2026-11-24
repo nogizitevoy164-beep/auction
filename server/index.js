@@ -105,12 +105,12 @@ function createAuctionRoom(tier, playerIds, botCount = 0) {
     id: id(), tier: Number(tier), fieldSeed: crypto.randomInt(1, 2147483647),
     status: 'active', round: 1, roundEndsAt: Date.now() + 40000,
     bids: {}, previousBids: {}, winnerId: null, winningBid: 0, settled: false,
-    players: playerIds.map((playerId) => ({ id: playerId, isBot: false }))
+    players: playerIds.map((playerId) => ({ id: playerId, isBot: false })), botReadyAt: {}
   };
   for (let index = 0; index < botCount; index += 1) {
     const botId = -(index + 1);
     room.players.push({ id: botId, isBot: true, name: `Бот ${index + 1}` });
-    room.bids[String(botId)] = 0;
+    room.botReadyAt[String(botId)] = Date.now() + 500 + ((room.fieldSeed + index * 137) % 4500);
   }
   auctionRooms.set(room.id, room);
   return room;
@@ -123,9 +123,17 @@ function roomForPlayer(roomId, playerId) {
 
 function processAuctionRoom(room) {
   if (!room || room.status !== 'active') return;
-  const humanPlayers = room.players.filter((entry) => !entry.isBot);
-  const allActed = humanPlayers.every((entry) => Object.prototype.hasOwnProperty.call(room.bids, String(entry.id)));
-  if (Date.now() < room.roundEndsAt && !allActed) return;
+  const now = Date.now();
+  for (const entry of room.players) {
+    if (!entry.isBot || Object.prototype.hasOwnProperty.call(room.bids, String(entry.id))) continue;
+    const readyAt = Number(room.botReadyAt[String(entry.id)] || 0);
+    if (now >= readyAt || now >= room.roundEndsAt) {
+      const variation = Math.abs((room.fieldSeed + room.round * 977 + Math.abs(entry.id) * 313) % 700);
+      room.bids[String(entry.id)] = Math.min(300 + variation, 1000);
+    }
+  }
+  const allActed = room.players.every((entry) => Object.prototype.hasOwnProperty.call(room.bids, String(entry.id)));
+  if (now < room.roundEndsAt && !allActed) return;
   room.previousBids = { ...room.bids };
   const ranked = Object.entries(room.bids).sort((a, b) => Number(b[1]) - Number(a[1]));
   if (ranked.length) {
@@ -143,7 +151,7 @@ function processAuctionRoom(room) {
     return;
   }
   room.round += 1; room.bids = {}; room.roundEndsAt = Date.now() + 40000;
-  for (const entry of room.players) if (entry.isBot) room.bids[String(entry.id)] = 0;
+  for (const entry of room.players) if (entry.isBot) room.botReadyAt[String(entry.id)] = Date.now() + 500 + ((room.fieldSeed + room.round * 701 + Math.abs(entry.id) * 137) % 4500);
 }
 
 function publicAuctionRoom(room) {
