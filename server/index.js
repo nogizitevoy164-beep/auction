@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const { hashPassword, verifyPassword } = require('./auth');
-const { createPool, checkConnection } = require('./db');
+const { createPool, checkConnection, ensureRuntimeTable, loadRuntimeState, saveRuntimeState } = require('./db');
 
 const PORT = Number(process.env.PORT || 8080);
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dev-admin-key';
@@ -38,8 +38,10 @@ function loadState() {
 
 let state = loadState();
 let sockets = new Set();
+let ready = Promise.resolve();
 function saveState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
+  if (postgres) saveRuntimeState(postgres, state).catch((error) => console.error(`PostgreSQL save failed: ${error.message}`));
 }
 
 function json(res, status, body) {
@@ -136,6 +138,7 @@ function expireListings() {
 }
 
 async function handle(req, res) {
+  await ready;
   expireListings();
   processLegendaryAuctions();
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -260,6 +263,15 @@ websocket.on('connection', (socket) => {
   socket.send(JSON.stringify({ type: 'news_snapshot', payload: state.news }));
   socket.on('close', () => sockets.delete(socket));
 });
+if (postgres) {
+  ready = (async () => {
+    await ensureRuntimeTable(postgres);
+    const stored = await loadRuntimeState(postgres);
+    if (stored) state = stored;
+    else await saveRuntimeState(postgres, state);
+  })().catch((error) => { console.error(`PostgreSQL bootstrap failed: ${error.message}`); throw error; });
+}
+
 server.listen(PORT, async () => {
   console.log(`Auction server listening on http://127.0.0.1:${PORT}`);
   if (postgres) console.log(`PostgreSQL connection: ${await checkConnection(postgres).catch(() => false) ? 'ok' : 'failed'}`);
