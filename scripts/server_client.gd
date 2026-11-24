@@ -73,6 +73,25 @@ func craft_potion() -> Dictionary:
 	return await _request_json("/api/v1/potions/craft", HTTPClient.METHOD_POST, {})
 
 
+func get_legendary_auctions() -> Dictionary:
+	return await _request_json("/api/v1/legendary-auctions")
+
+
+func create_legendary_auction(instance_id: String, start_price: int, duration_hours: int) -> Dictionary:
+	return await _request_json("/api/v1/legendary-auctions", HTTPClient.METHOD_POST, {
+		"instanceId": instance_id, "startPrice": start_price, "durationHours": duration_hours})
+
+
+func bid_legendary_auction(auction_id: String, amount: int) -> Dictionary:
+	return await _request_json("/api/v1/legendary-auctions/%s/bid" % auction_id,
+		HTTPClient.METHOD_POST, {"amount": amount})
+
+
+func finish_legendary_auction(auction_id: String) -> Dictionary:
+	return await _request_json("/api/v1/legendary-auctions/%s/finish" % auction_id,
+		HTTPClient.METHOD_POST, {})
+
+
 func _request_json(path: String, method: HTTPClient.Method = HTTPClient.METHOD_GET,
 		payload: Dictionary = {}) -> Dictionary:
 	var request := HTTPRequest.new()

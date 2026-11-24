@@ -198,6 +198,7 @@ func _setup_central_navigation() -> void:
 		{"id": "castle", "title": "Замок"},
 		{"id": "auction", "title": "Аукцион"},
 		{"id": "market", "title": "Рынок"},
+		{"id": "legendary", "title": "Легендарные"},
 		{"id": "potions", "title": "Зелья"},
 	]:
 		var button := Button.new()
@@ -248,6 +249,8 @@ func _show_central_view(view_id: String) -> void:
 			_load_castle_view()
 		elif view_id == "potions":
 			_load_potions_view()
+		elif view_id == "legendary":
+			_load_legendary_view()
 
 
 func _replace_central_box() -> VBoxContainer:
@@ -398,6 +401,54 @@ func _buy_market_listing(listing_id: int) -> void:
 	_apply_server_profile(profile)
 	add_log("[Рынок] Предмет куплен и добавлен в инвентарь.")
 	_load_market_view()
+
+
+func _load_legendary_view() -> void:
+	if not _server_connected:
+		return
+	var box := _replace_central_box()
+	var title := Label.new()
+	title.text = "Легендарные аукционы"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	box.add_child(title)
+	var response: Dictionary = await _server_client.get_legendary_auctions()
+	if not response.get("ok", false):
+		var failed := Label.new()
+		failed.text = "Не удалось загрузить легендарные аукционы"
+		box.add_child(failed)
+		return
+	var auctions: Array = response.get("data", {}).get("auctions", [])
+	if auctions.is_empty():
+		var empty := Label.new()
+		empty.text = "Активных легендарных аукционов нет"
+		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(empty)
+		return
+	for auction: Dictionary in auctions:
+		var row := HBoxContainer.new()
+		var label := Label.new()
+		label.text = "%s — текущая ставка: %d" % [auction.get("name", "Предмет"), int(auction.get("currentPrice", 0))]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		var amount := LineEdit.new()
+		amount.custom_minimum_size = Vector2(90, 0)
+		amount.text = str(int(auction.get("currentPrice", 0)) + 1000)
+		row.add_child(amount)
+		var bid := Button.new()
+		bid.text = "Сделать ставку"
+		bid.pressed.connect(_bid_legendary.bind(String(auction.get("id", "")), amount))
+		row.add_child(bid)
+		box.add_child(row)
+
+
+func _bid_legendary(auction_id: String, amount_input: LineEdit) -> void:
+	var result: Dictionary = await _server_client.bid_legendary_auction(auction_id, int(amount_input.text))
+	if not result.get("ok", false):
+		add_log("[Легендарный аукцион] Ставка отклонена.")
+		return
+	add_log("[Легендарный аукцион] Ставка принята.")
+	_load_legendary_view()
 
 
 func _refresh_inventory() -> void:
