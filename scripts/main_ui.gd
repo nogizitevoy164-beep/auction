@@ -211,6 +211,7 @@ func _setup_inventory_panel() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "InventoryPanel"
 	panel.custom_minimum_size = Vector2(280, 0)
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var box := VBoxContainer.new()
 	panel.add_child(box)
 	var header := Label.new()
@@ -221,8 +222,14 @@ func _setup_inventory_panel() -> void:
 	_inventory_gold_label = Label.new()
 	_inventory_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_inventory_gold_label)
+	var inventory_scroll := ScrollContainer.new()
+	inventory_scroll.name = "InventoryScroll"
+	inventory_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(inventory_scroll)
 	_inventory_list = VBoxContainer.new()
-	box.add_child(_inventory_list)
+	_inventory_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_scroll.add_child(_inventory_list)
 	$MainHBox/LeftColumn.add_child(panel)
 	_refresh_inventory()
 
@@ -844,7 +851,9 @@ func _refresh_inventory() -> void:
 		return
 	for index: int in inventory.size():
 		var item: Dictionary = inventory[index]
-		var row := HBoxContainer.new()
+		var row := VBoxContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_theme_constant_override("separation", 2)
 		var label := Label.new()
 		var is_gear := _is_equipment_item(item)
 		label.text = "%s — %d%s" % [item.get("title", "Предмет"), int(item.get("cost", item.get("baseCost", 0))), " (снаряжение)" if is_gear else ""]
@@ -852,26 +861,30 @@ func _refresh_inventory() -> void:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(label)
 		row.tooltip_text = _equipment_description(item) if is_gear else "Предмет для продажи\nСтоимость: %d монет" % int(item.get("cost", item.get("baseCost", 0)))
+		var actions := HBoxContainer.new()
+		actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_theme_constant_override("separation", 3)
+		row.add_child(actions)
 		if is_gear:
 			var equip_button := Button.new()
 			equip_button.text = "Одеть"
 			equip_button.tooltip_text = "Надеть предмет в слот: %s" % GameData.SLOT_NAMES[_equipment_for_item(item).slot()]
 			equip_button.pressed.connect(_equip_inventory_item.bind(index))
-			row.add_child(equip_button)
+			actions.add_child(equip_button)
 		var sell := Button.new()
 		sell.text = "Продать %d" % SaveDataS.sell_price(item)
 		sell.pressed.connect(_sell_inventory_item.bind(index))
-		row.add_child(sell)
+		actions.add_child(sell)
 		if _server_connected and not String(item.get("id", "")).is_empty():
 			var market_price := LineEdit.new()
-			market_price.custom_minimum_size = Vector2(70, 0)
+			market_price.custom_minimum_size = Vector2(58, 0)
 			market_price.text = str(maxi(int(item.get("cost", 1)), 1))
 			market_price.placeholder_text = "Цена"
-			row.add_child(market_price)
+			actions.add_child(market_price)
 			var market_button := Button.new()
-			market_button.text = "На рынок"
+			market_button.text = "Рынок"
 			market_button.pressed.connect(_list_inventory_item_on_server.bind(index, market_price))
-			row.add_child(market_button)
+			actions.add_child(market_button)
 		_inventory_list.add_child(row)
 
 
