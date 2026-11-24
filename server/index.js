@@ -99,6 +99,21 @@ async function handle(req, res) {
     const player = requirePlayer(req, res); if (!player) return;
     if (req.method === 'GET' && url.pathname === '/api/v1/me') return json(res, 200, publicPlayer(player));
     if (req.method === 'GET' && url.pathname === '/api/v1/castle') return json(res, 200, { level: 1, buildings: [{ type: 'coin_tower', level: 1, storedCoins: 0 }, { type: 'potion_tower', level: 1, storedCoins: 0 }] });
+    if (req.method === 'POST' && url.pathname === '/api/v1/inventory/sell') {
+      const data = await body(req); const index = player.inventory.findIndex((x) => x.id === data.instanceId && x.state === 'inventory');
+      if (index < 0) return error(res, 404, 'Предмет не найден в инвентаре');
+      const item = player.inventory[index]; const price = Math.max(1, Math.floor(Number(item.baseCost || 0) * 0.7));
+      player.inventory.splice(index, 1); player.coins += price; saveState();
+      return json(res, 200, { price, player: publicPlayer(player) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/v1/equipment/equip') {
+      const data = await body(req); const item = player.inventory.find((x) => x.id === data.instanceId && x.state === 'inventory');
+      const slot = String(data.slot || ''); if (!item || !slot) return error(res, 400, 'Предмет или слот некорректны');
+      const previousId = player.equipment[slot];
+      if (previousId) { const previous = player.inventory.find((x) => x.id === previousId); if (previous) previous.state = 'inventory'; }
+      item.state = 'equipped'; player.equipment[slot] = item.id; saveState();
+      return json(res, 200, publicPlayer(player));
+    }
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/grant-demo-item') {
       const data = await body(req); const definition = state.itemDefinitions.find((x) => x.id === data.definitionId);
       if (!definition) return error(res, 404, 'Описание предмета не найдено');
