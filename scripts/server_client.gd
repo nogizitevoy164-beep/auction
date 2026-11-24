@@ -57,6 +57,22 @@ func buy_market_listing(listing_id: int) -> Dictionary:
 		HTTPClient.METHOD_POST, {})
 
 
+func get_castle() -> Dictionary:
+	return await _request_json("/api/v1/castle")
+
+
+func collect_castle_income() -> Dictionary:
+	return await _request_json("/api/v1/castle/collect", HTTPClient.METHOD_POST, {})
+
+
+func upgrade_coin_tower() -> Dictionary:
+	return await _request_json("/api/v1/castle/upgrade", HTTPClient.METHOD_POST, {})
+
+
+func craft_potion() -> Dictionary:
+	return await _request_json("/api/v1/potions/craft", HTTPClient.METHOD_POST, {})
+
+
 func _request_json(path: String, method: HTTPClient.Method = HTTPClient.METHOD_GET,
 		payload: Dictionary = {}) -> Dictionary:
 	var request := HTTPRequest.new()

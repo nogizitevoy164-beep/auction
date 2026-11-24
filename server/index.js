@@ -73,6 +73,17 @@ function addNews(title, message, type = 'market') {
   state.news = state.news.slice(0, 100);
 }
 
+function ensureCastle(player) {
+  if (!player.castle) player.castle = { level: 1, buildings: { coin_tower: { level: 1, storedCoins: 0, lastIncomeAt: Date.now() }, potion_tower: { level: 1 } } };
+  if (!player.potions) player.potions = [];
+  const tower = player.castle.buildings.coin_tower;
+  const elapsedHours = Math.max(0, (Date.now() - Number(tower.lastIncomeAt || Date.now())) / 3600000);
+  const incomePerHour = 100 * Number(tower.level || 1);
+  tower.storedCoins = Math.min(incomePerHour * 24, Number(tower.storedCoins || 0) + Math.floor(elapsedHours * incomePerHour));
+  tower.lastIncomeAt = Date.now();
+  return player.castle;
+}
+
 function expireListings() {
   const now = Date.now(); let changed = false;
   for (const seller of state.players) {
@@ -98,7 +109,7 @@ async function handle(req, res) {
       const login = String(data.login || '').trim();
       if (login.length < 3) return error(res, 400, 'Логин должен содержать минимум 3 символа');
       if (state.players.some((p) => p.login.toLowerCase() === login.toLowerCase())) return error(res, 409, 'Игрок уже существует');
-      const player = { id: state.nextPlayerId++, login, coins: 1000, inventory: [], equipment: {}, listings: [] };
+      const player = { id: state.nextPlayerId++, login, coins: 1000, inventory: [], equipment: {}, listings: [], castle: null, potions: [] };
       const token = id(); state.players.push(player); state.tokens[token] = player.id; saveState();
       return json(res, 201, { token, player: publicPlayer(player) });
     }
@@ -113,7 +124,22 @@ async function handle(req, res) {
 
     const player = requirePlayer(req, res); if (!player) return;
     if (req.method === 'GET' && url.pathname === '/api/v1/me') return json(res, 200, publicPlayer(player));
-    if (req.method === 'GET' && url.pathname === '/api/v1/castle') return json(res, 200, { level: 1, buildings: [{ type: 'coin_tower', level: 1, storedCoins: 0 }, { type: 'potion_tower', level: 1, storedCoins: 0 }] });
+    if (req.method === 'GET' && url.pathname === '/api/v1/castle') { const castle = ensureCastle(player); saveState(); return json(res, 200, castle); }
+    if (req.method === 'POST' && url.pathname === '/api/v1/castle/collect') {
+      const castle = ensureCastle(player); const tower = castle.buildings.coin_tower; const collected = Number(tower.storedCoins || 0);
+      player.coins += collected; tower.storedCoins = 0; saveState(); return json(res, 200, { collected, player: publicPlayer(player), castle });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/v1/castle/upgrade') {
+      const castle = ensureCastle(player); const tower = castle.buildings.coin_tower; const cost = Number(tower.level || 1) * 1000;
+      if (player.coins < cost) return error(res, 400, 'Недостаточно монет для улучшения');
+      player.coins -= cost; tower.level += 1; saveState(); return json(res, 200, { cost, player: publicPlayer(player), castle });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/v1/potions') { ensureCastle(player); return json(res, 200, { potions: player.potions }); }
+    if (req.method === 'POST' && url.pathname === '/api/v1/potions/craft') {
+      const castle = ensureCastle(player); const level = Number(castle.buildings.potion_tower.level || 1);
+      const potion = { id: id(), recipeId: 'healing_potion', name: 'Зелье восстановления', quality: Math.min(level, 5), state: 'inventory', createdAt: new Date().toISOString() };
+      player.potions.push(potion); saveState(); return json(res, 201, { potion, player: publicPlayer(player) });
+    }
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/sell') {
       const data = await body(req); const index = player.inventory.findIndex((x) => x.id === data.instanceId && x.state === 'inventory');
       if (index < 0) return error(res, 404, 'Предмет не найден в инвентаре');
