@@ -300,7 +300,7 @@ func _equipment_for_item(item: Dictionary) -> EquipmentData:
 func _slot_node_for_equipment(equip: EquipmentData) -> String:
 	var slot := equip.slot()
 	for node_name: String in EQUIP_SLOT_LABELS:
-		var slot_name := EQUIP_SLOT_LABELS[node_name]
+		var slot_name: String = String(EQUIP_SLOT_LABELS[node_name])
 		if slot_name == String(GameData.SLOT_NAMES[slot]):
 			return node_name
 	return ""
@@ -326,7 +326,7 @@ func _equip_inventory_item(index: int) -> void:
 	if slot_node.is_empty():
 		return
 	if _server_connected and not String(item.get("id", "")).is_empty():
-		var response := await _server_client.equip_item(String(item["id"]), slot_node)
+		var response: Dictionary = await _server_client.equip_item(String(item["id"]), slot_node)
 		if not response.get("ok", false):
 			add_log("[Экипировка] Не удалось надеть предмет.")
 			return
