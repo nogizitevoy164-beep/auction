@@ -895,7 +895,7 @@ func _refresh_inventory() -> void:
 		sell.text = "Продать %d" % SaveDataS.sell_price(item)
 		sell.pressed.connect(_sell_inventory_item.bind(index))
 		actions.add_child(sell)
-		if _server_connected and not String(item.get("id", "")).is_empty():
+		if _server_connected and _is_market_item(item) and not String(item.get("id", "")).is_empty():
 			var market_price := LineEdit.new()
 			market_price.custom_minimum_size = Vector2(58, 0)
 			market_price.text = str(maxi(int(item.get("cost", 1)), 1))
@@ -906,6 +906,13 @@ func _refresh_inventory() -> void:
 			market_button.pressed.connect(_list_inventory_item_on_server.bind(index, market_price))
 			actions.add_child(market_button)
 		_inventory_list.add_child(row)
+
+
+func _is_market_item(item: Dictionary) -> bool:
+	if not String(item.get("gear_class_id", item.get("gearClassId", ""))).is_empty():
+		return true
+	var item_type := String(item.get("type", "")).to_lower()
+	return item_type in ["equipment", "weapon", "potion"]
 
 
 func _sell_inventory_item(index: int) -> void:

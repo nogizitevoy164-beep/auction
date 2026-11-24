@@ -254,6 +254,9 @@ async function handle(req, res) {
       const data = await body(req); const item = player.inventory.find((x) => x.id === data.instanceId && x.state === 'inventory');
       const price = Number(data.price);
       if (!item || !Number.isInteger(price) || price <= 0) return error(res, 400, 'Предмет или цена некорректны');
+      const itemType = String(item.type || '').toLowerCase();
+      const marketable = itemType === 'equipment' || itemType === 'weapon' || itemType === 'potion' || Boolean(item.gearClassId || item.gear_class_id);
+      if (!marketable) return error(res, 400, 'Этот предмет предназначен только для продажи и не выставляется на рынок');
       item.state = 'market_listing'; const listing = { id: state.nextListingId++, sellerId: player.id, instanceId: item.id, name: item.name, price, status: 'active', expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() };
       player.listings.push(listing); saveState(); return json(res, 201, listing);
     }
