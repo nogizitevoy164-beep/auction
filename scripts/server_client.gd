@@ -28,6 +28,21 @@ func connect_guest() -> Dictionary:
 	return profile["data"] if profile.get("ok", false) else {}
 
 
+func get_profile() -> Dictionary:
+	var response := await _request_json("/api/v1/me")
+	return response["data"] if response.get("ok", false) else {}
+
+
+func sell_to_server(instance_id: String) -> Dictionary:
+	return await _request_json("/api/v1/inventory/sell", HTTPClient.METHOD_POST,
+		{"instanceId": instance_id})
+
+
+func equip_item(instance_id: String, slot: String) -> Dictionary:
+	return await _request_json("/api/v1/equipment/equip", HTTPClient.METHOD_POST,
+		{"instanceId": instance_id, "slot": slot})
+
+
 func _request_json(path: String, method: HTTPClient.Method = HTTPClient.METHOD_GET,
 		payload: Dictionary = {}) -> Dictionary:
 	var request := HTTPRequest.new()

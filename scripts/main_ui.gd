@@ -100,6 +100,7 @@ var _calc_prefilled: bool = false
 var _central_view_host: PanelContainer
 var _active_central_view: String = "auction"
 var _server_client: Node
+var _server_connected: bool = false
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -132,6 +133,12 @@ func _sync_with_server() -> void:
 	if profile.is_empty():
 		add_log("[Сервер] Сервер недоступен — используется локальный режим.")
 		return
+	_server_connected = true
+	_apply_server_profile(profile)
+	add_log("[Сервер] Подключено: %s." % String(profile.get("login", "игрок")))
+
+
+func _apply_server_profile(profile: Dictionary) -> void:
 	players[0].gold = maxi(int(profile.get("coins", players[0].gold)), 0)
 	inventory.clear()
 	for server_item: Variant in profile.get("inventory", []):
@@ -145,7 +152,6 @@ func _sync_with_server() -> void:
 	SaveDataS.save_game(players[0].gold, inventory)
 	_update_player_labels()
 	_refresh_inventory()
-	add_log("[Сервер] Подключено: %s." % String(profile.get("login", "игрок")))
 
 
 # ============================================================
@@ -262,6 +268,9 @@ func _sell_inventory_item(index: int) -> void:
 	if index < 0 or index >= inventory.size():
 		return
 	var item: Dictionary = inventory[index]
+	if _server_connected and not String(item.get("id", "")).is_empty():
+		_sell_inventory_item_on_server(index, String(item["id"]))
+		return
 	var price := SaveDataS.sell_price(item)
 	players[0].gold += price
 	inventory.remove_at(index)
@@ -270,6 +279,16 @@ func _sell_inventory_item(index: int) -> void:
 	_update_player_labels()
 	_refresh_tier_buttons()
 	_refresh_inventory()
+
+
+func _sell_inventory_item_on_server(index: int, instance_id: String) -> void:
+	var result: Dictionary = await _server_client.sell_to_server(instance_id)
+	if not result.get("ok", false):
+		add_log("[Сервер] Не удалось продать предмет.")
+		return
+	var profile: Dictionary = result.get("data", {}).get("player", {})
+	_apply_server_profile(profile)
+	add_log("[Склад] Предмет продан через сервер.")
 
 
 # ============================================================
