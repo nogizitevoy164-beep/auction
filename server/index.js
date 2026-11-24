@@ -11,6 +11,13 @@ const ADMIN_KEY = process.env.ADMIN_KEY || 'dev-admin-key';
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = process.env.DATA_FILE || path.join(DATA_DIR, 'runtime.json');
 const postgres = createPool();
+const POLICY_VERSIONS = { terms: '1.0', privacy: '1.0', rules: '1.0', age: '1.0' };
+const POLICY_SUMMARIES = {
+  terms: 'Пользовательское соглашение: правила доступа, виртуальные предметы и ответственность игрока.',
+  privacy: 'Политика конфиденциальности: какие данные хранятся, зачем они нужны и как запросить удаление.',
+  rules: 'Правила игры: запрет читов, мультиаккаунтов, мошенничества и эксплуатации ошибок.',
+  age: 'Возрастное ограничение: игрок подтверждает, что соответствует минимальному возрасту, установленному для игры.'
+};
 
 const seed = {
   nextPlayerId: 1,
@@ -80,7 +87,7 @@ function fieldRules() {
 }
 
 function publicPlayer(player) {
-  return { id: player.id, login: player.login, coins: player.coins, inventory: player.inventory, equipment: player.equipment, serverId: 1, fieldRules: fieldRules() };
+  return { id: player.id, login: player.login, displayName: player.displayName || player.login, emailVerified: Boolean(player.emailVerified), policyAcceptances: player.policyAcceptances || {}, coins: player.coins, inventory: player.inventory, equipment: player.equipment, serverId: 1, fieldRules: fieldRules() };
 }
 
 function requirePlayer(req, res) {
@@ -162,19 +169,47 @@ async function handle(req, res) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'admin.html')));
     }
+    if (req.method === 'GET' && url.pathname === '/api/v1/policies') return json(res, 200, { versions: POLICY_VERSIONS, summaries: POLICY_SUMMARIES, minimumAge: 13 });
     if (req.method === 'POST' && url.pathname === '/api/v1/auth/register') {
       const data = await body(req);
       const login = String(data.login || '').trim();
       if (login.length < 3) return error(res, 400, 'Логин должен содержать минимум 3 символа');
-      if (state.players.some((p) => p.login.toLowerCase() === login.toLowerCase())) return error(res, 409, 'Игрок уже существует');
-      const credentials = hashPassword(String(data.password || `guest:${login}`));
-      const player = { id: state.nextPlayerId++, login, passwordSalt: credentials.salt, passwordHash: credentials.hash, coins: 1000, reservedCoins: 0, inventory: [], equipment: {}, listings: [], castle: null, potions: [] };
+      const isGuestRegistration = !data.email && !data.password && !data.policyAcceptances;
+      if (isGuestRegistration) {
+        const existingGuest = state.players.find((p) => p.login.toLowerCase() === login.toLowerCase());
+        if (existingGuest) {
+          const guestToken = id(); state.tokens[guestToken] = existingGuest.id;
+          return json(res, 200, { token: guestToken, player: publicPlayer(existingGuest) });
+        }
+        const guestCredentials = hashPassword(`guest:${login}`);
+        const guest = { id: state.nextPlayerId++, login, displayName: login, emailVerified: false, passwordSalt: guestCredentials.salt, passwordHash: guestCredentials.hash, coins: 1000, reservedCoins: 0, inventory: [], equipment: {}, listings: [], castle: null, potions: [] };
+        const guestToken = id(); state.players.push(guest); state.tokens[guestToken] = guest.id; saveState();
+        return json(res, 201, { token: guestToken, player: publicPlayer(guest) });
+      }
+      const email = String(data.email || '').trim().toLowerCase();
+      const password = String(data.password || '');
+      const displayName = String(data.displayName || login).trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) return error(res, 400, 'Укажите корректный email');
+      if (password.length < 8) return error(res, 400, 'Пароль должен содержать минимум 8 символов');
+      if (displayName.length < 2) return error(res, 400, 'Имя игрока должно содержать минимум 2 символа');
+      if (!data.ageConfirmed) return error(res, 400, 'Нужно подтвердить возраст');
+      const acceptances = data.policyAcceptances || {};
+      for (const key of Object.keys(POLICY_VERSIONS)) if (acceptances[key] !== POLICY_VERSIONS[key]) return error(res, 400, `Нужно принять политику: ${key}`);
+      const currentPlayer = auth(req);
+      const guestLogin = String(data.guestLogin || '').trim();
+      const migratingGuest = currentPlayer && !currentPlayer.email && currentPlayer.login === guestLogin && currentPlayer.login.toLowerCase() === login.toLowerCase();
+      if (state.players.some((p) => p !== currentPlayer && (p.login.toLowerCase() === login.toLowerCase() || String(p.email || '').toLowerCase() === email))) return error(res, 409, 'Логин или email уже зарегистрирован');
+      const credentials = hashPassword(password);
+      const player = migratingGuest ? currentPlayer : { id: state.nextPlayerId++, login, coins: 1000, reservedCoins: 0, inventory: [], equipment: {}, listings: [], castle: null, potions: [] };
+      Object.assign(player, { login, email, displayName, emailVerified: false, passwordSalt: credentials.salt, passwordHash: credentials.hash, ageConfirmedAt: new Date().toISOString(), policyAcceptances: { ...acceptances } });
       const token = id(); state.players.push(player); state.tokens[token] = player.id; saveState();
       return json(res, 201, { token, player: publicPlayer(player) });
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/auth/login') {
-      const data = await body(req); const player = state.players.find((p) => p.login === data.login);
-      if (!player || !verifyPassword(String(data.password || `guest:${data.login}`), { salt: player.passwordSalt, hash: player.passwordHash })) return error(res, 401, 'Неверные данные входа');
+      const data = await body(req); const identifier = String(data.login || data.email || '').trim().toLowerCase();
+      const player = state.players.find((p) => p.login.toLowerCase() === identifier || String(p.email || '').toLowerCase() === identifier);
+      const password = data.password || (player && !player.email ? `guest:${player.login}` : '');
+      if (!player || !verifyPassword(String(password), { salt: player.passwordSalt, hash: player.passwordHash })) return error(res, 401, 'Неверный логин, email или пароль');
       const token = id(); state.tokens[token] = player.id; saveState(); return json(res, 200, { token, player: publicPlayer(player) });
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/catalog/items') return json(res, 200, { items: state.itemDefinitions });

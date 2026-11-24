@@ -17,6 +17,12 @@ func connect_guest() -> Dictionary:
 	var health := await _request_json("/health")
 	if not health.get("ok", false):
 		return {}
+	var saved_session := _load_session()
+	if not String(saved_session.get("token", "")).is_empty():
+		token = String(saved_session["token"])
+		var existing_profile := await _request_json("/api/v1/me")
+		if existing_profile.get("ok", false):
+			return existing_profile["data"]
 	var login := _load_guest_login()
 	var registered := await _request_json("/api/v1/auth/register", HTTPClient.METHOD_POST,
 		{"login": login})
@@ -28,7 +34,7 @@ func connect_guest() -> Dictionary:
 		if not logged.get("ok", false):
 			return {}
 		token = String(logged["data"].get("token", ""))
-	_save_session(login)
+	_save_session(login, token)
 	var profile := await _request_json("/api/v1/me")
 	return profile["data"] if profile.get("ok", false) else {}
 
@@ -36,6 +42,35 @@ func connect_guest() -> Dictionary:
 func get_profile() -> Dictionary:
 	var response := await _request_json("/api/v1/me")
 	return response["data"] if response.get("ok", false) else {}
+
+
+func get_policies() -> Dictionary:
+	var response := await _request_json("/api/v1/policies")
+	return response["data"] if response.get("ok", false) else {}
+
+
+func login_account(login: String, password: String) -> Dictionary:
+	var response := await _request_json("/api/v1/auth/login", HTTPClient.METHOD_POST, {
+		"login": login, "password": password})
+	if not response.get("ok", false):
+		return response
+	token = String(response["data"].get("token", ""))
+	_save_session(login, token)
+	return {"ok": true, "data": response["data"].get("player", {})}
+
+
+func register_account(login: String, email: String, display_name: String, password: String,
+		age_confirmed: bool, policy_acceptances: Dictionary) -> Dictionary:
+	var response := await _request_json("/api/v1/auth/register", HTTPClient.METHOD_POST, {
+		"login": login, "email": email, "displayName": display_name,
+		"password": password, "ageConfirmed": age_confirmed,
+		"policyAcceptances": policy_acceptances,
+		"guestLogin": String(_load_session().get("login", ""))})
+	if not response.get("ok", false):
+		return response
+	token = String(response["data"].get("token", ""))
+	_save_session(login, token)
+	return {"ok": true, "data": response["data"].get("player", {})}
 
 
 func get_catalog_items() -> Dictionary:
@@ -158,16 +193,22 @@ func _request_json(path: String, method: HTTPClient.Method = HTTPClient.METHOD_G
 
 
 func _load_guest_login() -> String:
-	if FileAccess.file_exists(SESSION_PATH):
-		var file := FileAccess.open(SESSION_PATH, FileAccess.READ)
-		var saved: Variant = JSON.parse_string(file.get_as_text())
-		if saved is Dictionary and not String(saved.get("login", "")).is_empty():
-			return String(saved["login"])
+	var saved := _load_session()
+	if not String(saved.get("login", "")).is_empty() and String(saved.get("token", "")).is_empty():
+		return String(saved["login"])
 	var login := "guest_%d" % int(Time.get_unix_time_from_system())
-	_save_session(login)
+	_save_session(login, "")
 	return login
 
 
-func _save_session(login: String) -> void:
+func _load_session() -> Dictionary:
+	if not FileAccess.file_exists(SESSION_PATH):
+		return {}
+	var file := FileAccess.open(SESSION_PATH, FileAccess.READ)
+	var saved: Variant = JSON.parse_string(file.get_as_text())
+	return saved if saved is Dictionary else {}
+
+
+func _save_session(login: String, session_token: String = "") -> void:
 	var file := FileAccess.open(SESSION_PATH, FileAccess.WRITE)
-	file.store_string(JSON.stringify({"login": login}))
+	file.store_string(JSON.stringify({"login": login, "token": session_token}))

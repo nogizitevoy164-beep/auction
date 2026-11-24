@@ -16,6 +16,7 @@ const ROLE_DATA: Dictionary = {
 	"warrior": {"title": "Воин", "portrait": "res://icons/silhouette_warrior.svg"},
 	"assassin": {"title": "Ассасин", "portrait": "res://icons/silhouette_assassin.svg"},
 }
+const POLICY_VERSIONS: Dictionary = {"terms": "1.0", "privacy": "1.0", "rules": "1.0", "age": "1.0"}
 
 # ==================== ИГРОВОЕ ПОЛЕ ====================
 ## Сетка рисуется узлом GameField (scripts/game_field.gd):
@@ -31,6 +32,7 @@ var _inventory_list: VBoxContainer
 var _inventory_gold_label: Label
 var _role_selector: HBoxContainer
 var _selected_role: String = "warrior"
+var _role_locked: bool = false
 var _equipped_items: Dictionary = {}
 var _field_rules: Dictionary = {"registeredPlayers": 1, "legendaryCounts": {}}
 var _auction_settled: bool = false
@@ -108,6 +110,7 @@ const EQUIP_SLOT_LABELS: Dictionary = {
 var calc_expression: String = ""
 var _calc_prefilled: bool = false
 var _central_view_host: PanelContainer
+var _account_form_host: VBoxContainer
 var _active_central_view: String = "auction"
 var _server_client: Node
 var _server_connected: bool = false
@@ -260,13 +263,21 @@ func _setup_role_selector() -> void:
 
 
 func _select_role(role_id: String) -> void:
-	if not ROLE_DATA.has(role_id):
+	if _role_locked or not ROLE_DATA.has(role_id):
 		return
 	_selected_role = role_id
 	for button: Button in _role_selector.get_children():
 		button.button_pressed = button.text == String(ROLE_DATA[role_id]["title"])
 	_update_role_portrait()
 	add_log("[Персонаж] Выбрана роль: %s." % ROLE_DATA[role_id]["title"])
+
+
+func _set_role_locked(locked: bool) -> void:
+	_role_locked = locked
+	if _role_selector == null:
+		return
+	for button: Button in _role_selector.get_children():
+		button.disabled = locked
 
 
 func _update_role_portrait() -> void:
@@ -379,6 +390,7 @@ func _setup_central_navigation() -> void:
 		{"id": "legendary", "title": "Легендарные"},
 		{"id": "potions", "title": "Зелья"},
 		{"id": "catalog", "title": "Каталог"},
+		{"id": "account", "title": "Аккаунт"},
 	]:
 		var button := Button.new()
 		button.text = String(view["title"])
@@ -432,6 +444,8 @@ func _show_central_view(view_id: String) -> void:
 			_load_legendary_view()
 		elif view_id == "catalog":
 			_load_catalog_view()
+		elif view_id == "account":
+			_load_account_view()
 
 
 func _replace_central_box() -> VBoxContainer:
@@ -857,6 +871,117 @@ func _catalog_icon(item: Dictionary) -> TextureRect:
 	return icon
 
 
+func _load_account_view() -> void:
+	var box := _replace_central_box()
+	var title := Label.new()
+	title.text = "Аккаунт"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	box.add_child(title)
+	var switcher := HBoxContainer.new()
+	switcher.alignment = BoxContainer.ALIGNMENT_CENTER
+	var login_button := Button.new()
+	login_button.text = "Войти"
+	login_button.pressed.connect(_render_account_form.bind(false))
+	switcher.add_child(login_button)
+	var register_button := Button.new()
+	register_button.text = "Регистрация"
+	register_button.pressed.connect(_render_account_form.bind(true))
+	switcher.add_child(register_button)
+	box.add_child(switcher)
+	_account_form_host = VBoxContainer.new()
+	_account_form_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(_account_form_host)
+	_render_account_form(false)
+
+
+func _render_account_form(register_mode: bool) -> void:
+	if _account_form_host == null:
+		return
+	for child in _account_form_host.get_children():
+		child.queue_free()
+	var current := Label.new()
+	current.text = "Текущий аккаунт: %s" % String(players[0].player_name) if players.size() > 0 else ""
+	current.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_account_form_host.add_child(current)
+	var status := Label.new()
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_account_form_host.add_child(status)
+	var login_input := LineEdit.new()
+	login_input.placeholder_text = "Логин или email"
+	_account_form_host.add_child(login_input)
+	var email_input: LineEdit
+	var display_input: LineEdit
+	if register_mode:
+		email_input = LineEdit.new()
+		email_input.placeholder_text = "Email"
+		_account_form_host.add_child(email_input)
+		display_input = LineEdit.new()
+		display_input.placeholder_text = "Имя игрока"
+		_account_form_host.add_child(display_input)
+	var password_input := LineEdit.new()
+	password_input.placeholder_text = "Пароль (минимум 8 символов)"
+	password_input.secret = true
+	_account_form_host.add_child(password_input)
+	if register_mode:
+		var age := CheckButton.new()
+		age.text = "Мне есть 13 лет"
+		_account_form_host.add_child(age)
+		var terms := CheckButton.new()
+		terms.text = "Принимаю Пользовательское соглашение v1.0"
+		_account_form_host.add_child(terms)
+		var privacy := CheckButton.new()
+		privacy.text = "Принимаю Политику конфиденциальности v1.0"
+		_account_form_host.add_child(privacy)
+		var rules := CheckButton.new()
+		rules.text = "Принимаю Правила игры v1.0"
+		_account_form_host.add_child(rules)
+		var note := Label.new()
+		note.text = "Регистрация нужна для сохранения прогресса и доступа к рынку. Роль выбирается перед входом на поле."
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_account_form_host.add_child(note)
+		var submit := Button.new()
+		submit.text = "Зарегистрироваться"
+		submit.pressed.connect(_submit_registration.bind(login_input, email_input, display_input, password_input, age, terms, privacy, rules, status))
+		_account_form_host.add_child(submit)
+	else:
+		var submit_login := Button.new()
+		submit_login.text = "Войти"
+		submit_login.pressed.connect(_submit_login.bind(login_input, password_input, status))
+		_account_form_host.add_child(submit_login)
+
+
+func _submit_login(login_input: LineEdit, password_input: LineEdit, status: Label) -> void:
+	status.text = "Выполняется вход..."
+	var result: Dictionary = await _server_client.login_account(login_input.text.strip_edges(), password_input.text)
+	if not result.get("ok", false):
+		status.text = String(result.get("data", {}).get("error", "Не удалось войти"))
+		return
+	_apply_server_profile(result.get("data", {}))
+	status.text = "Вход выполнен. Прогресс сохранён на сервере."
+	add_log("[Аккаунт] Выполнен вход: %s." % login_input.text.strip_edges())
+
+
+func _submit_registration(login_input: LineEdit, email_input: LineEdit, display_input: LineEdit,
+		password_input: LineEdit, age: CheckButton, terms: CheckButton, privacy: CheckButton,
+		rules: CheckButton, status: Label) -> void:
+	status.text = "Выполняется регистрация..."
+	var acceptances := {"terms": POLICY_VERSIONS["terms"], "privacy": POLICY_VERSIONS["privacy"], "rules": POLICY_VERSIONS["rules"], "age": POLICY_VERSIONS["age"]}
+	if not age.button_pressed or not terms.button_pressed or not privacy.button_pressed or not rules.button_pressed:
+		status.text = "Подтвердите возраст и принятие всех обязательных политик."
+		return
+	var result: Dictionary = await _server_client.register_account(
+		login_input.text.strip_edges(), email_input.text.strip_edges(), display_input.text.strip_edges(),
+		password_input.text, age.button_pressed, acceptances)
+	if not result.get("ok", false):
+		status.text = String(result.get("data", {}).get("error", "Не удалось зарегистрироваться"))
+		return
+	_apply_server_profile(result.get("data", {}))
+	status.text = "Регистрация выполнена. Email пока не подтверждён."
+	add_log("[Аккаунт] Регистрация завершена. Роль выбирается перед входом на поле.")
+
+
 func _refresh_inventory() -> void:
 	if _inventory_list == null:
 		return
@@ -1032,6 +1157,7 @@ func _on_tier_selected(tier: int) -> void:
 			info["title"], min_gold, players[0].gold])
 		return
 	current_tier = tier
+	_set_role_locked(true)
 	_tier_overlay.visible = false
 	main_hbox.visible = true
 	game_field.visible = true
@@ -1414,6 +1540,7 @@ func _claim_field_item_on_server(item: Dictionary) -> void:
 
 func _show_field_selection_in_game_area() -> void:
 	_round_timer.stop()
+	_set_role_locked(false)
 	main_hbox.visible = true
 	round_info_panel.visible = true
 	field_hbox.visible = true
