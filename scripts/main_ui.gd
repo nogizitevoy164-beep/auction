@@ -162,6 +162,9 @@ func _apply_server_profile(profile: Dictionary) -> void:
 				"cost": int(server_item.get("baseCost", server_item.get("cost", 0))),
 				"quality": int(server_item.get("quality", 1)),
 				"gear_class_id": String(server_item.get("gearClassId", server_item.get("gear_class_id", ""))),
+				"type": String(server_item.get("type", "")),
+				"weaponKind": String(server_item.get("weaponKind", "")),
+				"description": String(server_item.get("description", "")),
 				"state": String(server_item.get("state", "inventory")),
 			}
 			if item["state"] == "equipped":
@@ -259,6 +262,14 @@ func _gear_id_for_item(item: Dictionary) -> String:
 	var explicit_id := String(item.get("gear_class_id", item.get("gearClassId", "")))
 	if GameData.GEAR_CLASSES.has(explicit_id):
 		return explicit_id
+	var weapon_kind := String(item.get("weaponKind", item.get("weapon_kind", "")))
+	var weapon_gear: Dictionary = {
+		"dagger": "weapon_dagger_assassin",
+		"sword": "weapon_sword_warrior",
+		"staff": "weapon_staff_mage",
+	}
+	if weapon_gear.has(weapon_kind) and GameData.GEAR_CLASSES.has(weapon_gear[weapon_kind]):
+		return String(weapon_gear[weapon_kind])
 	var title := String(item.get("title", item.get("name", "")))
 	for gear_id: String in GameData.GEAR_CLASSES:
 		if String(GameData.GEAR_CLASSES[gear_id]["title"]) == title:
