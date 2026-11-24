@@ -23,6 +23,16 @@ async function request(path, options = {}) {
     assert.equal(grant.status, 201); const item = await grant.json();
     const listing = await request('/api/v1/market/listings', { method: 'POST', headers, body: JSON.stringify({ instanceId: item.id, price: 99 }) });
     assert.equal(listing.status, 201); const data = await listing.json(); assert.equal(data.price, 99);
+    const weaponResponse = await request('/api/v1/inventory/grant-demo-item', { method: 'POST', headers, body: JSON.stringify({ definitionId: 'weapon_staff_mage', quality: 5 }) });
+    assert.equal(weaponResponse.status, 201); const weapon = await weaponResponse.json();
+    const legendary = await request('/api/v1/legendary-auctions', { method: 'POST', headers, body: JSON.stringify({ instanceId: weapon.id, startPrice: 500, durationHours: 3 }) });
+    assert.equal(legendary.status, 201); const auction = await legendary.json();
+    const buyerResponse = await request('/api/v1/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login: `buyer_${Date.now()}` }) });
+    const buyer = await buyerResponse.json();
+    const bid = await request(`/api/v1/legendary-auctions/${auction.id}/bid`, { method: 'POST', headers: { authorization: `Bearer ${buyer.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ amount: 500 }) });
+    assert.equal(bid.status, 200);
+    const finished = await request(`/api/v1/legendary-auctions/${auction.id}/finish`, { method: 'POST', headers });
+    assert.equal(finished.status, 200);
     console.log('SERVER TESTS PASSED');
   } finally { child.kill('SIGTERM'); try { require('node:fs').unlinkSync(dataFile); } catch {} }
 })().catch((error) => { console.error(error); child.kill('SIGTERM'); process.exitCode = 1; });

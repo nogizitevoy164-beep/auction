@@ -13,6 +13,7 @@ const seed = {
   nextListingId: 1,
   players: [],
   tokens: {},
+  legendaryAuctions: [],
   itemDefinitions: [
     { id: 'copper_coin', name: 'Медная монета', description: 'Обычный предмет.', type: 'sellable', rarity: 1, baseCost: 20, chances: { starter: 1, mid: 0.5, elite: 0.2 } },
     { id: 'weapon_dagger_assassin', name: 'Кинжал ассасина', description: 'Открывает 2 выбранные клетки.', type: 'weapon', weaponKind: 'dagger', rarity: 1, baseCost: 2500, chances: { starter: 0.1, mid: 0.3, elite: 0.8 } },
@@ -84,6 +85,31 @@ function ensureCastle(player) {
   return player.castle;
 }
 
+function availableCoins(player) { return Number(player.coins || 0) - Number(player.reservedCoins || 0); }
+
+function settleLegendaryAuction(auction) {
+  if (auction.status !== 'active') return;
+  auction.status = 'finished';
+  const seller = state.players.find((p) => p.id === auction.sellerId);
+  const item = seller?.inventory.find((x) => x.id === auction.instanceId);
+  if (auction.currentBidderId) {
+    const winner = state.players.find((p) => p.id === auction.currentBidderId);
+    const bid = Number(auction.currentPrice);
+    if (winner && seller && item) {
+      winner.reservedCoins = Math.max(0, Number(winner.reservedCoins || 0) - bid);
+      winner.coins -= bid; seller.coins += bid;
+      item.state = 'inventory'; seller.inventory = seller.inventory.filter((x) => x.id !== item.id); winner.inventory.push(item);
+      addNews('Легендарный предмет продан', `${item.name} продан на легендарном аукционе.`, 'legendary_item');
+    }
+  } else if (item) item.state = 'inventory';
+  saveState();
+}
+
+function processLegendaryAuctions() {
+  const now = Date.now();
+  for (const auction of state.legendaryAuctions) if (auction.status === 'active' && Date.parse(auction.endsAt) <= now) settleLegendaryAuction(auction);
+}
+
 function expireListings() {
   const now = Date.now(); let changed = false;
   for (const seller of state.players) {
@@ -100,6 +126,7 @@ function expireListings() {
 
 async function handle(req, res) {
   expireListings();
+  processLegendaryAuctions();
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const parts = url.pathname.split('/').filter(Boolean);
   try {
@@ -109,7 +136,7 @@ async function handle(req, res) {
       const login = String(data.login || '').trim();
       if (login.length < 3) return error(res, 400, 'Логин должен содержать минимум 3 символа');
       if (state.players.some((p) => p.login.toLowerCase() === login.toLowerCase())) return error(res, 409, 'Игрок уже существует');
-      const player = { id: state.nextPlayerId++, login, coins: 1000, inventory: [], equipment: {}, listings: [], castle: null, potions: [] };
+      const player = { id: state.nextPlayerId++, login, coins: 1000, reservedCoins: 0, inventory: [], equipment: {}, listings: [], castle: null, potions: [] };
       const token = id(); state.players.push(player); state.tokens[token] = player.id; saveState();
       return json(res, 201, { token, player: publicPlayer(player) });
     }
@@ -121,6 +148,7 @@ async function handle(req, res) {
     if (req.method === 'GET' && url.pathname === '/api/v1/catalog/items') return json(res, 200, { items: state.itemDefinitions });
     if (req.method === 'GET' && url.pathname === '/api/v1/news') return json(res, 200, { news: state.news });
     if (req.method === 'GET' && url.pathname === '/api/v1/market/listings') return json(res, 200, { listings: state.players.flatMap((p) => p.listings || []).filter((l) => l.status === 'active') });
+    if (req.method === 'GET' && url.pathname === '/api/v1/legendary-auctions') return json(res, 200, { auctions: state.legendaryAuctions.filter((a) => a.status === 'active') });
 
     const player = requirePlayer(req, res); if (!player) return;
     if (req.method === 'GET' && url.pathname === '/api/v1/me') return json(res, 200, publicPlayer(player));
@@ -168,12 +196,33 @@ async function handle(req, res) {
       item.state = 'market_listing'; const listing = { id: state.nextListingId++, sellerId: player.id, instanceId: item.id, name: item.name, price, status: 'active', expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() };
       player.listings.push(listing); saveState(); return json(res, 201, listing);
     }
+    if (req.method === 'POST' && url.pathname === '/api/v1/legendary-auctions') {
+      const data = await body(req); const item = player.inventory.find((x) => x.id === data.instanceId && x.state === 'inventory' && Number(x.quality) >= 5);
+      const hours = Number(data.durationHours); const startPrice = Number(data.startPrice);
+      if (!item || !Number.isInteger(startPrice) || startPrice <= 0 || hours < 3 || hours > 24) return error(res, 400, 'Нужен легендарный предмет, цена и срок от 3 до 24 часов');
+      item.state = 'legendary_auction'; const auction = { id: id(), sellerId: player.id, instanceId: item.id, name: item.name, startPrice, currentPrice: startPrice, currentBidderId: null, endsAt: new Date(Date.now() + hours * 3600000).toISOString(), status: 'active' };
+      state.legendaryAuctions.push(auction); addNews('Легендарный предмет выставлен', `${item.name} выставлен на легендарный аукцион.`, 'legendary_item'); saveState(); return json(res, 201, auction);
+    }
     if (req.method === 'POST' && parts[0] === 'api' && parts[1] === 'v1' && parts[2] === 'market' && parts[3] === 'listings' && parts[5] === 'buy') {
       const listingId = Number(parts[4]); const listing = state.players.flatMap((p) => p.listings || []).find((x) => x.id === listingId && x.status === 'active');
       if (!listing) return error(res, 404, 'Лот не найден');
       if (listing.sellerId === player.id || player.coins < listing.price) return error(res, 400, 'Покупка недоступна');
       const seller = state.players.find((p) => p.id === listing.sellerId); const item = seller.inventory.find((x) => x.id === listing.instanceId);
       player.coins -= listing.price; seller.coins += listing.price; item.state = 'inventory'; seller.listings = seller.listings.filter((x) => x.id !== listing.id); player.inventory.push(item); listing.status = 'sold'; addNews('Предмет продан', `${item.name} был продан на рынке.`, 'market'); saveState(); return json(res, 200, { listing, player: publicPlayer(player) });
+    }
+    if (req.method === 'POST' && parts[0] === 'api' && parts[1] === 'v1' && parts[2] === 'legendary-auctions' && parts[4] === 'bid') {
+      const auction = state.legendaryAuctions.find((x) => x.id === parts[3] && x.status === 'active');
+      const data = await body(req); const amount = Number(data.amount);
+      if (!auction || auction.sellerId === player.id) return error(res, 404, 'Аукцион недоступен');
+      const minimum = auction.currentBidderId ? Number(auction.currentPrice) + 1000 : Number(auction.startPrice);
+      if (!Number.isInteger(amount) || amount < minimum || availableCoins(player) < amount) return error(res, 400, 'Ставка должна быть выше на 1000 монет и доступна по балансу');
+      if (auction.currentBidderId) { const previous = state.players.find((p) => p.id === auction.currentBidderId); if (previous) previous.reservedCoins = Math.max(0, Number(previous.reservedCoins || 0) - auction.currentPrice); }
+      player.reservedCoins = Number(player.reservedCoins || 0) + amount; auction.currentPrice = amount; auction.currentBidderId = player.id; saveState(); return json(res, 200, auction);
+    }
+    if (req.method === 'POST' && parts[0] === 'api' && parts[1] === 'v1' && parts[2] === 'legendary-auctions' && parts[4] === 'finish') {
+      const auction = state.legendaryAuctions.find((x) => x.id === parts[3] && x.status === 'active');
+      if (!auction || auction.sellerId !== player.id) return error(res, 403, 'Завершить аукцион может только продавец');
+      settleLegendaryAuction(auction); return json(res, 200, auction);
     }
     if (req.method === 'POST' && url.pathname.startsWith('/api/v1/admin/items')) {
       if (req.headers['x-admin-key'] !== ADMIN_KEY) return error(res, 403, 'Нужны права администратора');
