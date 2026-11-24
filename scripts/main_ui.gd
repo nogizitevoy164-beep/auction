@@ -644,10 +644,10 @@ func _load_catalog_view() -> void:
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(scroll)
 	var grid := GridContainer.new()
-	grid.columns = 2
+	grid.columns = 3
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
 	scroll.add_child(grid)
 	for item: Variant in items:
 		if item is Dictionary:
@@ -705,29 +705,29 @@ func _merge_catalog_items(local_items: Array, server_items: Variant) -> Array:
 
 func _catalog_card(item: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(250, 150)
+	card.custom_minimum_size = Vector2(170, 108)
 	var quality := clampi(int(item.get("quality", item.get("rarity", 1))), 1, 5)
 	var quality_color: Color = GameData.QUALITY_COLORS[quality]
 	var card_style := StyleBoxFlat.new()
 	card_style.bg_color = Color(0.10, 0.09, 0.14, 0.96)
-	card_style.border_width_left = 3
-	card_style.border_width_top = 3
-	card_style.border_width_right = 3
-	card_style.border_width_bottom = 3
+	card_style.border_width_left = 2
+	card_style.border_width_top = 2
+	card_style.border_width_right = 2
+	card_style.border_width_bottom = 2
 	card_style.border_color = quality_color
 	var shadow_color := quality_color
 	shadow_color.a = 0.72
 	card_style.shadow_color = shadow_color
-	card_style.shadow_size = 10
+	card_style.shadow_size = 6
 	card.add_theme_stylebox_override("panel", card_style)
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 10)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_right", 10)
-	margin.add_theme_constant_override("margin_bottom", 8)
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_top", 5)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_bottom", 5)
 	card.add_child(margin)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 6)
 	margin.add_child(row)
 	var icon := _catalog_icon(item)
 	row.add_child(icon)
@@ -736,23 +736,30 @@ func _catalog_card(item: Dictionary) -> PanelContainer:
 	row.add_child(info)
 	var name_label := Label.new()
 	name_label.text = String(item.get("name", item.get("title", "Предмет")))
-	name_label.add_theme_font_size_override("font_size", 18)
+	name_label.add_theme_font_size_override("font_size", 14)
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info.add_child(name_label)
 	var meta := Label.new()
-	meta.text = "Тип: %s | Качество: %s | Стоимость: %d монет" % [
+	meta.text = "%s • %s • %d монет" % [
 		String(item.get("type", "предмет")), _catalog_rarity_name(quality),
 		int(item.get("baseCost", item.get("cost", 0)))]
+	meta.add_theme_font_size_override("font_size", 11)
 	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info.add_child(meta)
-	var properties := Label.new()
-	properties.text = "Свойства: %s" % _catalog_properties(item)
-	properties.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.add_child(properties)
-	var description := Label.new()
-	description.text = "Описание: %s" % String(item.get("description", "Описание отсутствует."))
-	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.add_child(description)
+	var properties_text := _catalog_properties(item)
+	if not properties_text.is_empty():
+		var properties := Label.new()
+		properties.text = properties_text
+		properties.add_theme_font_size_override("font_size", 11)
+		properties.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.add_child(properties)
+	var description_text := String(item.get("description", "")).strip_edges()
+	if not description_text.is_empty():
+		var description := Label.new()
+		description.text = description_text
+		description.add_theme_font_size_override("font_size", 11)
+		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.add_child(description)
 	return card
 
 
@@ -768,12 +775,12 @@ func _catalog_properties(item: Dictionary) -> String:
 	if not String(properties).is_empty():
 		return String(properties)
 	var weapon_kind := String(item.get("weaponKind", ""))
-	return "Оружие: %s" % weapon_kind if not weapon_kind.is_empty() else "Без особых свойств"
+	return "Оружие: %s" % weapon_kind if not weapon_kind.is_empty() else ""
 
 
 func _catalog_icon(item: Dictionary) -> TextureRect:
 	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(64, 64)
+	icon.custom_minimum_size = Vector2(38, 38)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	var icon_value := String(item.get("icon", item.get("iconPath", "")))
