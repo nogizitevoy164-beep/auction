@@ -45,6 +45,9 @@ function loadState() {
 
 let state = loadState();
 let sockets = new Set();
+const MATCHMAKING_CAPACITY = 4;
+const matchmakingQueues = new Map();
+const matchmakingStarted = new Map();
 let ready = Promise.resolve();
 function saveState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
@@ -94,6 +97,13 @@ function requirePlayer(req, res) {
   const player = auth(req);
   if (!player) { error(res, 401, 'Требуется авторизация'); return null; }
   return player;
+}
+
+function matchmakingStatus(tier, playerId = 0) {
+  const queue = matchmakingQueues.get(String(tier)) || [];
+  const started = matchmakingStarted.get(String(tier));
+  const isStarted = Boolean(started && started.players.includes(playerId) && Date.now() - started.startedAt < 60000);
+  return { tier: Number(tier), waitingPlayers: queue.length, capacity: MATCHMAKING_CAPACITY, ready: queue.length >= MATCHMAKING_CAPACITY || isStarted, status: isStarted ? 'started' : 'waiting' };
 }
 
 function addNews(title, message, type = 'market') {
@@ -227,6 +237,39 @@ async function handle(req, res) {
     }
     const player = requirePlayer(req, res); if (!player) return;
     if (req.method === 'GET' && url.pathname === '/api/v1/me') return json(res, 200, publicPlayer(player));
+    if (url.pathname === '/api/v1/matchmaking/status' && req.method === 'GET') {
+      const tier = String(url.searchParams.get('tier') || '0');
+      return json(res, 200, matchmakingStatus(tier, player.id));
+    }
+    if (url.pathname === '/api/v1/matchmaking/join' && req.method === 'POST') {
+      const data = await body(req); const tier = String(Number(data.tier));
+      if (!['0', '1', '2'].includes(tier)) return error(res, 400, 'Поле аукциона указано неверно');
+      const queue = matchmakingQueues.get(tier) || [];
+      if (!queue.includes(player.id)) queue.push(player.id);
+      matchmakingQueues.set(tier, queue);
+      const snapshot = matchmakingStatus(tier);
+      if (queue.length >= MATCHMAKING_CAPACITY) {
+        matchmakingStarted.set(tier, { players: [...queue], startedAt: Date.now() });
+        matchmakingQueues.delete(tier);
+        return json(res, 200, { ...snapshot, waitingPlayers: queue.length, ready: true, status: 'started' });
+      }
+      return json(res, 200, snapshot);
+    }
+    if (url.pathname === '/api/v1/matchmaking/skip' && req.method === 'POST') {
+      const data = await body(req); const tier = String(Number(data.tier));
+      if (!['0', '1', '2'].includes(tier)) return error(res, 400, 'Поле аукциона указано неверно');
+      const queue = matchmakingQueues.get(tier) || [];
+      if (!queue.includes(player.id)) queue.push(player.id);
+      matchmakingStarted.set(tier, { players: [...queue], startedAt: Date.now() });
+      matchmakingQueues.delete(tier);
+      return json(res, 200, { ...matchmakingStatus(tier, player.id), waitingPlayers: queue.length, ready: true, status: 'started', humanPlayers: queue.length, bots: Math.max(0, MATCHMAKING_CAPACITY - queue.length) });
+    }
+    if (url.pathname === '/api/v1/matchmaking/leave' && req.method === 'POST') {
+      const data = await body(req); const tier = String(Number(data.tier));
+      const queue = (matchmakingQueues.get(tier) || []).filter((id) => id !== player.id);
+      if (queue.length) matchmakingQueues.set(tier, queue); else matchmakingQueues.delete(tier);
+      return json(res, 200, matchmakingStatus(tier, player.id));
+    }
     if (req.method === 'GET' && url.pathname === '/api/v1/castle') { const castle = ensureCastle(player); saveState(); return json(res, 200, castle); }
     if (req.method === 'POST' && url.pathname === '/api/v1/castle/collect') {
       const castle = ensureCastle(player); const tower = castle.buildings.coin_tower; const collected = Number(tower.storedCoins || 0);

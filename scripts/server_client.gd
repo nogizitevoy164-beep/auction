@@ -172,6 +172,25 @@ func finish_legendary_auction(auction_id: String) -> Dictionary:
 		HTTPClient.METHOD_POST, {})
 
 
+func join_matchmaking(tier: int) -> Dictionary:
+	return await _request_json("/api/v1/matchmaking/join", HTTPClient.METHOD_POST,
+		{"tier": tier})
+
+
+func get_matchmaking_status(tier: int) -> Dictionary:
+	return await _request_json("/api/v1/matchmaking/status?tier=%d" % tier)
+
+
+func skip_matchmaking(tier: int) -> Dictionary:
+	return await _request_json("/api/v1/matchmaking/skip", HTTPClient.METHOD_POST,
+		{"tier": tier})
+
+
+func leave_matchmaking(tier: int) -> Dictionary:
+	return await _request_json("/api/v1/matchmaking/leave", HTTPClient.METHOD_POST,
+		{"tier": tier})
+
+
 func _request_json(path: String, method: HTTPClient.Method = HTTPClient.METHOD_GET,
 		payload: Dictionary = {}) -> Dictionary:
 	var request := HTTPRequest.new()

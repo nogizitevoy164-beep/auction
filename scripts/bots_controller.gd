@@ -34,7 +34,7 @@ static func estimate_lot_value(items: Array, revealed: Dictionary) -> int:
 
 
 ## Ставка бота в текущем раунде.
-## Возвращает сумму ставки (0 — пас), всегда в пределах gold.
+## Возвращает сумму ставки (0 допустимо), всегда в пределах gold.
 static func bot_bid(estimate: int, round: int, gold: int,
 		aggression: float, rng: RandomNumberGenerator) -> int:
 	if estimate <= 0 or gold <= 0:

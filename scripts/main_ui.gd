@@ -115,6 +115,10 @@ var _active_central_view: String = "auction"
 var _server_client: Node
 var _server_connected: bool = false
 var _server_player_id: int = 0
+var _matchmaking_timer: Timer
+var _matchmaking_tier: int = -1
+var _matchmaking_status_label: Label
+var _matchmaking_active: bool = false
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -140,6 +144,11 @@ func _ready() -> void:
 	_setup_calc()
 	_server_client = ServerClientS.new()
 	add_child(_server_client)
+	_matchmaking_timer = Timer.new()
+	_matchmaking_timer.wait_time = 2.0
+	_matchmaking_timer.one_shot = false
+	_matchmaking_timer.timeout.connect(_poll_matchmaking)
+	add_child(_matchmaking_timer)
 	call_deferred("_sync_with_server")
 
 
@@ -1162,12 +1171,100 @@ func _on_tier_selected(tier: int) -> void:
 	main_hbox.visible = true
 	game_field.visible = true
 	game_field_panel.visible = true
+	_matchmaking_tier = tier
+	_matchmaking_active = true
+	_show_matchmaking_view(info)
+
+
+func _show_matchmaking_view(info: Dictionary) -> void:
+	_round_timer.stop()
+	round_info_panel.visible = false
+	field_hbox.visible = false
+	_central_view_host.visible = true
+	var box := _replace_central_box()
+	var title := Label.new()
+	title.text = "Поиск игроков"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	box.add_child(title)
+	var field_label := Label.new()
+	field_label.text = String(info.get("title", "Аукцион"))
+	field_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(field_label)
+	_matchmaking_status_label = Label.new()
+	_matchmaking_status_label.text = "Подключение к очереди игроков..."
+	_matchmaking_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_matchmaking_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_matchmaking_status_label)
+	var skip := Button.new()
+	skip.text = "Начать с ботами"
+	skip.custom_minimum_size = Vector2(300, 52)
+	skip.pressed.connect(_skip_matchmaking)
+	box.add_child(skip)
+	var hint := Label.new()
+	hint.text = "Ожидайте игроков или пропустите поиск — свободные места займут боты."
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(hint)
+	if _server_connected:
+		var result: Dictionary = await _server_client.join_matchmaking(_matchmaking_tier)
+		if not _matchmaking_active:
+			return
+		if result.get("ok", false):
+			_update_matchmaking_status(result.get("data", {}))
+			if String(result.get("data", {}).get("status", "")) == "started":
+				_start_auction_after_matchmaking()
+				return
+		else:
+			_matchmaking_status_label.text = "Не удалось войти в очередь. Можно начать с ботами."
+		_matchmaking_timer.start()
+	else:
+		_matchmaking_status_label.text = "Сервер недоступен — можно продолжить локально с ботами."
+
+
+func _update_matchmaking_status(data: Dictionary) -> void:
+	if _matchmaking_status_label == null:
+		return
+	var waiting := int(data.get("waitingPlayers", data.get("humanPlayers", 1)))
+	var capacity := int(data.get("capacity", 4))
+	_matchmaking_status_label.text = "Готовы к игре: %d из %d\nДругие игроки могут присоединиться к этому полю." % [waiting, capacity]
+
+
+func _poll_matchmaking() -> void:
+	if not _matchmaking_active or not _server_connected:
+		return
+	var result: Dictionary = await _server_client.get_matchmaking_status(_matchmaking_tier)
+	if not _matchmaking_active or not result.get("ok", false):
+		return
+	var data: Dictionary = result.get("data", {})
+	_update_matchmaking_status(data)
+	if bool(data.get("ready", false)) or String(data.get("status", "")) == "started":
+		_start_auction_after_matchmaking()
+
+
+func _skip_matchmaking() -> void:
+	if not _matchmaking_active:
+		return
+	if _server_connected:
+		var result: Dictionary = await _server_client.skip_matchmaking(_matchmaking_tier)
+		if result.get("ok", false):
+			var data: Dictionary = result.get("data", {})
+			add_log("[Игра] Поиск пропущен: игроков %d, ботов %d." % [int(data.get("humanPlayers", 1)), int(data.get("bots", 3))])
+		else:
+			add_log("[Игра] Поиск пропущен, свободные места займут боты.")
+	_start_auction_after_matchmaking()
+
+
+func _start_auction_after_matchmaking() -> void:
+	if not _matchmaking_active:
+		return
+	_matchmaking_active = false
+	_matchmaking_timer.stop()
+	var info: Dictionary = GameData.FIELD_TIERS[_matchmaking_tier]
 	_show_central_view("auction")
-	# Боты тоже вошли на это поле — их золото не ниже порога входа.
-	for i: int in range(1, players.size()):
-		players[i].gold = maxi(players[i].gold, min_gold)
+	_round_timer.stop()
 	auction_field_name = String(info["title"])
-	add_log("[Игра] Вы вошли на «%s» (вход от %d монет)." % [auction_field_name, min_gold])
+	add_log("[Игра] Вы вошли на «%s» (вход от %d монет)." % [auction_field_name, int(info["min_gold"])])
 	_place_tier_items(int(info["lot_count"]))
 	_auction_settled = false
 	_auction_finished = false
@@ -1628,13 +1725,13 @@ func _update_player_labels() -> void:
 		var p: PlayerDataS = players[i]
 		if _round_bids_visible:
 			var previous_bid: int = int(_revealed_round_bids.get(p.id, 0))
-			bid_label.text = "Ставка: %d" % previous_bid if previous_bid > 0 else "Пас"
+			bid_label.text = "Ставка: %d" % previous_bid
 		else:
-			if p.last_bid > 0:
+			if p.has_acted:
 				bid_label.text = "Готов"
 			else:
-				bid_label.text = "Пас" if p.has_acted else "Ожидание"
-		_set_bid_frame(avatar, p.last_bid > 0)
+				bid_label.text = "Ожидание"
+		_set_bid_frame(avatar, p.has_acted)
 	calc_gold_label.text = "Ваше золото: %d" % players[0].gold
 
 
@@ -1678,7 +1775,7 @@ func _bot_place_bid(bot: PlayerDataS, round_at_schedule: int) -> void:
 	if bot.last_bid > 0:
 		add_log("[%s] сделал ставку." % bot.player_name)
 	else:
-		add_log("[%s] пасует в этом раунде" % bot.player_name)
+		add_log("[%s] сделал ставку: 0." % bot.player_name)
 	_update_player_labels()
 	if _check_early_victory(bot.id):
 		return
@@ -1780,17 +1877,17 @@ func _on_bid_button_pressed() -> void:
 	if _auction_finished:
 		add_log("[Игра] Аукцион уже завершён")
 		return
-	if player.last_bid > 0:
+	if player.has_acted:
 		add_log("[Игра] Вы уже сделали ставку в этом раунде")
 		return
 	var value := _calc_result()
 	if value < 0:
-		add_log("[Игра] Введите ставку или оставьте 0 для паса")
+		add_log("[Игра] Введите ставку от 0 до доступного количества монет")
 		return
 	if value == 0:
 		player.last_bid = 0
 		player.has_acted = true
-		add_log("[Вы] пас в этом раунде")
+		add_log("[Вы] сделали ставку: 0.")
 		_update_player_labels()
 		_check_all_bid()
 		return
