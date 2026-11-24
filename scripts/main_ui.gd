@@ -176,7 +176,7 @@ func _apply_server_profile(profile: Dictionary) -> void:
 					server_slot = String(profile.get("equipment", {}).find_key(String(server_item.get("id", ""))))
 				if not server_slot.is_empty():
 					_equipped_items[server_slot] = item
-			else:
+			elif item["state"] == "inventory":
 				inventory.append(item)
 	SaveDataS.save_game(players[0].gold, inventory)
 	_update_player_labels()
@@ -923,13 +923,19 @@ func _list_inventory_item_on_server(index: int, price_input: LineEdit) -> void:
 		add_log("[Рынок] Укажите положительную цену.")
 		return
 	var item_id := String(inventory[index].get("id", ""))
+	if item_id.is_empty():
+		add_log("[Рынок] Предмет ещё синхронизируется с сервером. Повторите через секунду.")
+		return
+	var item_title := String(inventory[index].get("title", "Предмет"))
 	var result: Dictionary = await _server_client.create_market_listing(item_id, price)
 	if not result.get("ok", false):
-		add_log("[Рынок] Не удалось выставить предмет.")
+		var error_data: Dictionary = result.get("data", {})
+		add_log("[Рынок] Не удалось выставить предмет: %s" % String(error_data.get("error", "сервер отклонил запрос")))
 		return
 	var profile: Dictionary = await _server_client.get_profile()
 	_apply_server_profile(profile)
-	add_log("[Рынок] Предмет выставлен на 24 часа.")
+	add_log("[Рынок] Предмет «%s» выставлен на 24 часа за %d монет." % [
+		item_title, price])
 	if _active_central_view == "market":
 		_load_market_view()
 
