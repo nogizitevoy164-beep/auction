@@ -2,6 +2,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.PORT || 8080);
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dev-admin-key';
@@ -33,6 +34,7 @@ function loadState() {
 }
 
 let state = loadState();
+let sockets = new Set();
 function saveState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
 }
@@ -72,6 +74,12 @@ function requirePlayer(req, res) {
 function addNews(title, message, type = 'market') {
   state.news.unshift({ id: Date.now(), title, message, type, createdAt: new Date().toISOString() });
   state.news = state.news.slice(0, 100);
+  broadcast('news_created', state.news[0]);
+}
+
+function broadcast(type, payload) {
+  const message = JSON.stringify({ type, payload });
+  for (const socket of sockets) if (socket.readyState === 1) socket.send(message);
 }
 
 function ensureCastle(player) {
@@ -131,6 +139,10 @@ async function handle(req, res) {
   const parts = url.pathname.split('/').filter(Boolean);
   try {
     if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, serverId: 1, playersOnline: state.players.length });
+    if (req.method === 'GET' && url.pathname === '/admin') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(fs.readFileSync(path.join(__dirname, 'admin.html')));
+    }
     if (req.method === 'POST' && url.pathname === '/api/v1/auth/register') {
       const data = await body(req);
       const login = String(data.login || '').trim();
@@ -150,6 +162,14 @@ async function handle(req, res) {
     if (req.method === 'GET' && url.pathname === '/api/v1/market/listings') return json(res, 200, { listings: state.players.flatMap((p) => p.listings || []).filter((l) => l.status === 'active') });
     if (req.method === 'GET' && url.pathname === '/api/v1/legendary-auctions') return json(res, 200, { auctions: state.legendaryAuctions.filter((a) => a.status === 'active') });
 
+    if (req.method === 'POST' && url.pathname === '/api/v1/admin/items') {
+      if (req.headers['x-admin-key'] !== ADMIN_KEY) return error(res, 403, 'Нужны права администратора');
+      const data = await body(req); if (!data.id || !data.name) return error(res, 400, 'Нужны id и name');
+      const existing = state.itemDefinitions.find((x) => x.id === data.id);
+      if (existing) Object.assign(existing, data);
+      else state.itemDefinitions.push({ ...data, chances: data.chances || { starter: 0, mid: 0, elite: 0 } });
+      saveState(); broadcast('catalog_updated', { id: data.id }); return json(res, 200, { items: state.itemDefinitions });
+    }
     const player = requirePlayer(req, res); if (!player) return;
     if (req.method === 'GET' && url.pathname === '/api/v1/me') return json(res, 200, publicPlayer(player));
     if (req.method === 'GET' && url.pathname === '/api/v1/castle') { const castle = ensureCastle(player); saveState(); return json(res, 200, castle); }
@@ -224,16 +244,17 @@ async function handle(req, res) {
       if (!auction || auction.sellerId !== player.id) return error(res, 403, 'Завершить аукцион может только продавец');
       settleLegendaryAuction(auction); return json(res, 200, auction);
     }
-    if (req.method === 'POST' && url.pathname.startsWith('/api/v1/admin/items')) {
-      if (req.headers['x-admin-key'] !== ADMIN_KEY) return error(res, 403, 'Нужны права администратора');
-      const data = await body(req); if (!data.id || !data.name) return error(res, 400, 'Нужны id и name');
-      const existing = state.itemDefinitions.find((x) => x.id === data.id); if (existing) Object.assign(existing, data); else state.itemDefinitions.push({ ...data, chances: data.chances || { starter: 0, mid: 0, elite: 0 } });
-      saveState(); return json(res, 200, { items: state.itemDefinitions });
-    }
     return error(res, 404, 'Маршрут не найден');
   } catch (e) { return error(res, 400, e.message); }
 }
 
 const server = http.createServer(handle);
+const websocket = new WebSocketServer({ server, path: '/ws' });
+websocket.on('connection', (socket) => {
+  sockets.add(socket);
+  socket.send(JSON.stringify({ type: 'connected', payload: { serverId: 1 } }));
+  socket.send(JSON.stringify({ type: 'news_snapshot', payload: state.news }));
+  socket.on('close', () => sockets.delete(socket));
+});
 server.listen(PORT, () => console.log(`Auction server listening on http://127.0.0.1:${PORT}`));
 process.on('SIGTERM', () => server.close(() => process.exit(0)));

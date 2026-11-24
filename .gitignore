@@ -2,3 +2,4 @@
 .godot/
 /android/
 /server/data/*.json
+/server/node_modules/
