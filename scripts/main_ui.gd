@@ -32,6 +32,7 @@ var _inventory_gold_label: Label
 var _role_selector: HBoxContainer
 var _selected_role: String = "warrior"
 var _equipped_items: Dictionary = {}
+var _field_rules: Dictionary = {"registeredPlayers": 1, "legendaryCounts": {}}
 var _auction_settled: bool = false
 ## Ставки предыдущего завершённого раунда, доступные для отображения.
 var _revealed_round_bids: Dictionary = {}
@@ -152,6 +153,8 @@ func _sync_with_server() -> void:
 
 func _apply_server_profile(profile: Dictionary) -> void:
 	players[0].gold = maxi(int(profile.get("coins", players[0].gold)), 0)
+	if profile.has("fieldRules") and profile["fieldRules"] is Dictionary:
+		_field_rules = profile["fieldRules"]
 	inventory.clear()
 	_equipped_items.clear()
 	for server_item: Variant in profile.get("inventory", []):
@@ -1106,8 +1109,8 @@ func rebuild_field() -> void:
 	game_field.set_items(field_items)
 
 
-## Набирает случайные предметы из каталога продажи
-## (GameData.SELLABLE_ITEMS) по шансам текущего поля и раскладывает
+## Набирает случайные предметы из каталога продажи и редкое снаряжение
+## по шансам текущего поля и раскладывает
 ## их по верхним рядам поля «полками» — без наложений,
 ## цвет клетки = цвет качества.
 ## Шанс предмета = chance_starter / chance_mid / chance_elite
@@ -1118,21 +1121,34 @@ func _place_tier_items(count: int) -> void:
 	var chance_key: String = "chance_starter"
 	if current_tier >= 0:
 		chance_key = String(GameData.FIELD_TIERS[current_tier]["chance_key"])
-	# Взвешенный выбор без повторений: чем выше шанс — тем чаще лот.
-	var pool: Array = GameData.SELLABLE_ITEMS.keys()
+	# Взвешенный выбор без повторений: снаряжение имеет отдельный
+	# очень низкий вес, а легендарные экземпляры дополнительно
+	# зависят от числа игроков и уже выпавших копий.
+	var pool: Array[Dictionary] = []
+	for item_id: String in GameData.SELLABLE_ITEMS:
+		var item: Dictionary = GameData.SELLABLE_ITEMS[item_id].duplicate(true)
+		pool.append({"id": item_id, "item": item, "weight": float(item.get(chance_key, 0.0))})
+	for gear_id: String in GameData.GEAR_CLASSES:
+		for quality: int in range(1, 6):
+			var gear_item := _make_field_gear_item(gear_id, quality)
+			pool.append({
+				"id": "%s_q%d" % [gear_id, quality],
+				"item": gear_item,
+				"weight": _gear_field_weight(gear_id, quality),
+			})
 	var picked: Array[Dictionary] = []
 	for i: int in mini(count, pool.size()):
 		var total_weight := 0.0
-		for id in pool:
-			total_weight += float(GameData.SELLABLE_ITEMS[id][chance_key])
+		for candidate: Dictionary in pool:
+			total_weight += float(candidate["weight"])
 		var roll := _item_rng.randf() * total_weight
-		var chosen: String = String(pool[pool.size() - 1])
-		for id in pool:
-			roll -= float(GameData.SELLABLE_ITEMS[id][chance_key])
+		var chosen: Dictionary = pool[pool.size() - 1]
+		for candidate: Dictionary in pool:
+			roll -= float(candidate["weight"])
 			if roll <= 0.0:
-				chosen = String(id)
+				chosen = candidate
 				break
-		picked.append(GameData.SELLABLE_ITEMS[chosen])
+		picked.append(chosen["item"])
 		pool.erase(chosen)
 	# Раскладка «полками».
 	var col: int = 0
@@ -1150,6 +1166,10 @@ func _place_tier_items(count: int) -> void:
 			"w": item_size.x, "h": item_size.y,
 			"title": info["title"],
 			"cost": int(info["cost"]),
+			"quality": int(info.get("quality", 1)),
+			"type": String(info.get("type", "sellable")),
+			"gear_class_id": String(info.get("gear_class_id", "")),
+			"size": item_size,
 			"color": GameData.QUALITY_COLORS[info["quality"]],
 		})
 		col += item_size.x + 1
@@ -1159,6 +1179,34 @@ func _place_tier_items(count: int) -> void:
 	for placed: Dictionary in field_items:
 		titles.append(String(placed["title"]))
 	add_log("[Игра] Лоты на поле: %s" % ", ".join(titles))
+
+
+func _make_field_gear_item(gear_id: String, quality: int) -> Dictionary:
+	var equip: EquipmentData = EquipmentData.make(gear_id, quality)
+	var info: Dictionary = GameData.GEAR_CLASSES[gear_id]
+	return {
+		"title": equip.item_name,
+		"cost": equip.cost,
+		"quality": quality,
+		"type": "equipment",
+		"gear_class_id": gear_id,
+		"size": Vector2i(info["size"]),
+		"description": equip.ability_description(),
+	}
+
+
+func _gear_field_weight(gear_id: String, quality: int) -> float:
+	var quality_weight: Array[float] = [0.18, 0.07, 0.02, 0.005, 0.001]
+	var weight := quality_weight[clampi(quality, 1, 5) - 1] * 0.2
+	if quality != GameData.Quality.LEGENDARY:
+		return weight
+	var registered := maxi(int(_field_rules.get("registeredPlayers", 1)), 1)
+	var target := maxi(1, int(ceil(float(registered) / 1000.0)))
+	var counts: Dictionary = _field_rules.get("legendaryCounts", {})
+	var already_dropped := int(counts.get(gear_id, 0))
+	if already_dropped >= target:
+		return weight * 0.03
+	return weight * minf(5.0, 1.0 + float(target - already_dropped))
 
 
 ## Добавляет предмет в пул: размер w × h клеток, угол — (row, col).
@@ -1278,11 +1326,15 @@ func _settle_auction() -> void:
 		return
 	players[0].gold = maxi(players[0].gold - winning_bid, 0)
 	for item: Dictionary in field_items:
-		inventory.append({
+		var won_item := {
 			"title": String(item.get("title", "Предмет")),
 			"cost": int(item.get("cost", 0)),
 			"size": "%dx%d" % [int(item.get("w", 1)), int(item.get("h", 1))],
-		})
+			"quality": int(item.get("quality", 1)),
+			"type": String(item.get("type", "sellable")),
+			"gear_class_id": String(item.get("gear_class_id", "")),
+		}
+		inventory.append(won_item)
 	SaveDataS.save_game(players[0].gold, inventory)
 	add_log("[Победа] Вы выиграли %d предмет(ов)." % field_items.size())
 	_update_player_labels()

@@ -66,8 +66,21 @@ function auth(req) {
   return state.players.find((player) => player.id === playerId) || null;
 }
 
+function fieldRules() {
+  const legendaryCounts = {};
+  for (const player of state.players) {
+    for (const item of player.inventory || []) {
+      const quality = Number(item.quality || item.rarity || 1);
+      if (quality < 5) continue;
+      const gearId = String(item.gearClassId || item.gear_class_id || (item.type === 'weapon' ? item.id : ''));
+      if (gearId) legendaryCounts[gearId] = Number(legendaryCounts[gearId] || 0) + 1;
+    }
+  }
+  return { registeredPlayers: state.players.length, legendaryCounts };
+}
+
 function publicPlayer(player) {
-  return { id: player.id, login: player.login, coins: player.coins, inventory: player.inventory, equipment: player.equipment, serverId: 1 };
+  return { id: player.id, login: player.login, coins: player.coins, inventory: player.inventory, equipment: player.equipment, serverId: 1, fieldRules: fieldRules() };
 }
 
 function requirePlayer(req, res) {
