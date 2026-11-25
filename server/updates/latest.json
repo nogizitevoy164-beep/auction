@@ -1,7 +1,7 @@
 {
-  "version": "0.2.2",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.2.zip",
-  "sha256": "7cfcf973d49c40067dab6447acfb1ca91f97f051f59a2ae3eacc93c5e75bade5",
+  "version": "0.2.3",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.3.zip",
+  "sha256": "9a9e70e8a9683c8d78af6a2c43c1b579e01a20c65bb8a6c63605adffad768987",
   "mandatory": false,
   "minClientVersion": "0.2.0",
   "releaseNotes": "Синхронизация онлайн-аукционов и исправления ставок."

@@ -202,6 +202,9 @@ func _apply_server_profile(profile: Dictionary) -> void:
 				inventory.append(item)
 	SaveDataS.save_game(players[0].gold, inventory)
 	_update_player_labels()
+	_refresh_tier_buttons()
+	if calc_gold_label != null:
+		calc_gold_label.text = "Ваше золото: %d" % players[0].gold
 	_refresh_equipment_slots()
 	_refresh_inventory()
 
