@@ -431,7 +431,13 @@ async function handle(req, res) {
       if (ingredientIndex < 0) return error(res, 400, `Нужен ингредиент качества не выше ${maxQuality}`);
       const ingredient = player.inventory.splice(ingredientIndex, 1)[0];
       const potion = { id: id(), recipeId: 'reveal_item', name: 'Зелье откровения', quality: Math.min(Number(ingredient.quality || 1), maxQuality), baseCost: 250 * Math.min(Number(ingredient.quality || 1), maxQuality), type: 'potion', effect: 'Открывает информацию об одном предмете на поле', state: 'inventory', createdAt: new Date().toISOString() };
-      player.potions.push(potion); saveState(); return json(res, 201, { potion, player: publicPlayer(player) });
+      player.potions.push(potion); player.inventory.push(potion); saveState(); return json(res, 201, { potion, player: publicPlayer(player) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/v1/potions/use') {
+      const data = await body(req); const index = (player.inventory || []).findIndex((item) => item.id === data.instanceId && item.type === 'potion' && item.state === 'inventory');
+      if (index < 0) return error(res, 404, 'Зелье не найдено');
+      const potion = player.inventory.splice(index, 1)[0]; player.potions = (player.potions || []).filter((item) => item.id !== potion.id); saveState();
+      return json(res, 200, { potion, player: publicPlayer(player) });
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/sell') {
       const data = await body(req); const index = player.inventory.findIndex((x) => x.id === data.instanceId && x.state === 'inventory');

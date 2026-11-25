@@ -134,6 +134,10 @@ func craft_potion() -> Dictionary:
 	return await _request_json("/api/v1/potions/craft", HTTPClient.METHOD_POST, {})
 
 
+func use_potion(instance_id: String) -> Dictionary:
+	return await _request_json("/api/v1/potions/use", HTTPClient.METHOD_POST, {"instanceId": instance_id})
+
+
 func start_realtime() -> void:
 	if _socket != null:
 		return

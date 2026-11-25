@@ -1075,6 +1075,11 @@ func _refresh_inventory() -> void:
 			equip_button.tooltip_text = "Надеть предмет в слот: %s" % GameData.SLOT_NAMES[_equipment_for_item(item).slot()]
 			equip_button.pressed.connect(_equip_inventory_item.bind(index))
 			actions.add_child(equip_button)
+		if String(item.get("type", "")) == "potion":
+			var use_potion := Button.new()
+			use_potion.text = "Использовать"
+			use_potion.pressed.connect(_use_potion_inventory_item.bind(index))
+			actions.add_child(use_potion)
 		var sell := Button.new()
 		sell.text = "Продать %d" % SaveDataS.sell_price(item)
 		sell.pressed.connect(_sell_inventory_item.bind(index))
@@ -1090,6 +1095,43 @@ func _refresh_inventory() -> void:
 			market_button.pressed.connect(_list_inventory_item_on_server.bind(index, market_price))
 			actions.add_child(market_button)
 		_inventory_list.add_child(row)
+
+
+func _use_potion_inventory_item(index: int) -> void:
+	if index < 0 or index >= inventory.size():
+		return
+	var item: Dictionary = inventory[index]
+	if String(item.get("type", "")) != "potion":
+		return
+	if _server_connected:
+		var result: Dictionary = await _server_client.use_potion(String(item.get("id", "")))
+		if not result.get("ok", false):
+			add_log("[Зелья] Не удалось использовать зелье.")
+			return
+		_apply_server_profile(result.get("data", {}).get("player", {}))
+	else:
+		inventory.remove_at(index)
+		_refresh_inventory()
+	_reveal_one_field_item()
+	add_log("[Зелья] Открыта информация об одном предмете на поле.")
+
+
+func _reveal_one_field_item() -> void:
+	if game_field == null:
+		return
+	for item: Dictionary in field_items:
+		var fully_revealed := true
+		for row in range(int(item.get("row", 0)), int(item.get("row", 0)) + int(item.get("h", 1))):
+			for col in range(int(item.get("col", 0)), int(item.get("col", 0)) + int(item.get("w", 1))):
+				if not game_field.revealed.has(Vector2i(col, row)):
+					fully_revealed = false
+		if fully_revealed:
+			continue
+		for row in range(int(item.get("row", 0)), int(item.get("row", 0)) + int(item.get("h", 1))):
+			for col in range(int(item.get("col", 0)), int(item.get("col", 0)) + int(item.get("w", 1))):
+				game_field.revealed[Vector2i(col, row)] = true
+		game_field.queue_redraw()
+		return
 
 
 func _is_market_item(item: Dictionary) -> bool:
