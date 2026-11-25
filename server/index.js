@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const { hashPassword, verifyPassword } = require('./auth');
 const { createPool, checkConnection, ensureRuntimeTable, loadRuntimeState, saveRuntimeState } = require('./db');
+const { buildCatalog } = require('./catalog_seed');
 
 const PORT = Number(process.env.PORT || 8080);
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dev-admin-key';
@@ -50,6 +51,19 @@ function loadState() {
 
 let state = loadState();
 if (!state.castleTowerDefinitions) state.castleTowerDefinitions = structuredClone(DEFAULT_TOWER_DEFINITIONS);
+// Keep the server catalogue complete even when runtime.json was created by an older build.
+const seededCatalog = buildCatalog();
+if (!Array.isArray(state.itemDefinitions)) state.itemDefinitions = [];
+for (const item of seededCatalog) {
+  const existing = state.itemDefinitions.find((candidate) => candidate.id === item.id);
+  if (existing) {
+    if (!existing.iconPath) existing.iconPath = item.iconPath;
+    if (!existing.sizeX) existing.sizeX = item.sizeX;
+    if (!existing.sizeY) existing.sizeY = item.sizeY;
+    if (!existing.chances) existing.chances = item.chances;
+  } else state.itemDefinitions.push(item);
+}
+saveState();
 let sockets = new Set();
 const MATCHMAKING_CAPACITY = 4;
 const matchmakingQueues = new Map();
@@ -317,6 +331,16 @@ async function handle(req, res) {
     if (req.method === 'GET' && url.pathname === '/admin') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'admin.html')));
+    }
+    if (req.method === 'GET' && parts[0] === 'admin-assets' && parts[1]) {
+      const filename = path.basename(parts[1]);
+      if (filename !== parts[1]) return error(res, 400, 'Некорректный файл изображения');
+      const assetPath = path.join(__dirname, 'admin-assets', filename);
+      if (!fs.existsSync(assetPath)) return error(res, 404, 'Изображение не найдено');
+      const extension = path.extname(filename).toLowerCase();
+      const contentType = extension === '.svg' ? 'image/svg+xml' : extension === '.webp' ? 'image/webp' : 'image/png';
+      res.writeHead(200, { 'content-type': contentType, 'cache-control': 'public, max-age=86400' });
+      return fs.createReadStream(assetPath).pipe(res);
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/policies') return json(res, 200, { versions: POLICY_VERSIONS, summaries: POLICY_SUMMARIES, minimumAge: 13 });
     if (req.method === 'POST' && url.pathname === '/api/v1/auth/register') {
