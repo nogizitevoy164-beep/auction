@@ -10,6 +10,7 @@ const PORT = Number(process.env.PORT || 8080);
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dev-admin-key';
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = process.env.DATA_FILE || path.join(DATA_DIR, 'runtime.json');
+const UPDATES_DIR = path.join(__dirname, 'updates');
 const postgres = createPool();
 const POLICY_VERSIONS = { terms: '1.0', privacy: '1.0', rules: '1.0', age: '1.0' };
 const POLICY_SUMMARIES = {
@@ -239,6 +240,20 @@ async function handle(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const parts = url.pathname.split('/').filter(Boolean);
   try {
+    if (req.method === 'GET' && url.pathname === '/updates/latest.json') {
+      const manifestPath = path.join(UPDATES_DIR, 'latest.json');
+      if (!fs.existsSync(manifestPath)) return error(res, 404, 'Манифест обновлений ещё не опубликован');
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' });
+      return res.end(fs.readFileSync(manifestPath));
+    }
+    if (req.method === 'GET' && parts[0] === 'updates' && parts[1] && parts[1] !== 'latest.json') {
+      const filename = path.basename(parts[1]);
+      if (filename !== parts[1] || !filename.endsWith('.zip')) return error(res, 400, 'Некорректный файл обновления');
+      const updatePath = path.join(UPDATES_DIR, filename);
+      if (!fs.existsSync(updatePath)) return error(res, 404, 'Файл обновления не найден');
+      res.writeHead(200, { 'content-type': 'application/zip', 'content-length': fs.statSync(updatePath).size, 'cache-control': 'public, max-age=3600' });
+      return fs.createReadStream(updatePath).pipe(res);
+    }
     if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, serverId: 1, playersOnline: state.players.length, storage: postgres ? 'postgresql-configured' : 'json' });
     if (req.method === 'GET' && url.pathname === '/admin') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
