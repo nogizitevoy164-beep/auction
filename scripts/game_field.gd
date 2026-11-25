@@ -197,17 +197,6 @@ func _draw() -> void:
 		var title_baseline := rect.position.y + rect.size.y * 0.5 + title_size * 0.35
 		draw_string(font, Vector2(rect.position.x + 3.0, title_baseline), String(item.get("title", "")),
 				HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 6.0, title_size, Color.WHITE)
-
-
-func _item_type_label(item_type: String) -> String:
-	match item_type:
-		"equipment": return "Снаряжение"
-		"weapon": return "Оружие"
-		"ingredient": return "Ингредиент"
-		"potion": return "Зелье"
-		"sellable": return "Предмет"
-		_: return item_type.capitalize()
-
 	# 3) Сетка поверх.
 	for c in FIELD_COLS + 1:
 		var x := c * _cell
@@ -226,6 +215,16 @@ func _item_type_label(item_type: String) -> String:
 				var baseline := r * _cell + _cell * 0.5 + font_size * 0.35
 				draw_string(font, Vector2(c * _cell, baseline), "?",
 						HORIZONTAL_ALIGNMENT_CENTER, _cell, font_size, FOG_MARK_COLOR)
+
+
+func _item_type_label(item_type: String) -> String:
+	match item_type:
+		"equipment": return "Снаряжение"
+		"weapon": return "Оружие"
+		"ingredient": return "Ингредиент"
+		"potion": return "Зелье"
+		"sellable": return "Предмет"
+		_: return item_type.capitalize()
 
 
 ## Клик по клетке -> координаты (пригодится для ставок по клеткам).

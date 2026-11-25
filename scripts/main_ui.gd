@@ -1539,7 +1539,7 @@ func _build_round_clues(seed: int) -> void:
 		if quality_counts.has(quality):
 			pool.append("На поле находится %d предметов качества «%s»." % [int(quality_counts[quality]), GameData.QUALITY_NAMES[quality]])
 	for item_type: String in type_counts:
-		pool.append("На поле находится %d предметов типа «%s»." % [int(type_counts[item_type]), _item_type_label(item_type)])
+		pool.append("На поле находится %d предметов типа «%s»." % [int(type_counts[item_type]), _round_clue_type_label(item_type)])
 	for size: String in size_counts:
 		pool.append("На поле находится %d предметов размером %s клеток." % [int(size_counts[size]), size])
 	if field_items.size() >= 2:
@@ -1548,8 +1548,8 @@ func _build_round_clues(seed: int) -> void:
 		var first := field_items[reveal_rng.randi_range(0, field_items.size() - 1)]
 		var second := field_items[reveal_rng.randi_range(0, field_items.size() - 1)]
 		pool.append("Раскрыта информация о двух предметах: «%s» — %s, %s, %d×%d; «%s» — %s, %s, %d×%d." % [
-			String(first.get("title", "Предмет")), GameData.QUALITY_NAMES[int(first.get("quality", 1))], _item_type_label(String(first.get("type", "Предмет"))), int(first.get("w", 1)), int(first.get("h", 1)),
-			String(second.get("title", "Предмет")), GameData.QUALITY_NAMES[int(second.get("quality", 1))], _item_type_label(String(second.get("type", "Предмет"))), int(second.get("w", 1)), int(second.get("h", 1))])
+			String(first.get("title", "Предмет")), GameData.QUALITY_NAMES[int(first.get("quality", 1))], _round_clue_type_label(String(first.get("type", "Предмет"))), int(first.get("w", 1)), int(first.get("h", 1)),
+			String(second.get("title", "Предмет")), GameData.QUALITY_NAMES[int(second.get("quality", 1))], _round_clue_type_label(String(second.get("type", "Предмет"))), int(second.get("w", 1)), int(second.get("h", 1))])
 	pool.append("В этом раунде дополнительная информация о предметах не раскрывается.")
 	_round_clues.clear()
 	var clue_rng := RandomNumberGenerator.new()
@@ -1570,6 +1570,16 @@ func _update_round_clue(round_number: int) -> void:
 		_round_clue_label.text = "Публичное свойство раунда: %s" % _round_clues[round_number - 1]
 	else:
 		_round_clue_label.text = "Публичное свойство раунда: —"
+
+
+func _round_clue_type_label(item_type: String) -> String:
+	match item_type:
+		"equipment": return "Снаряжение"
+		"weapon": return "Оружие"
+		"ingredient": return "Ингредиент"
+		"potion": return "Зелье"
+		"sellable": return "Предмет"
+		_: return item_type.capitalize()
 
 
 ## slot_node_name — один из ключей EQUIP_SLOT_LABELS (например "SlotWeapon").

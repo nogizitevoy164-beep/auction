@@ -1,8 +1,8 @@
 {
-  "version": "0.2.8",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.8.zip",
-  "sha256": "4d6766c9043c7fa576e44e11758363882e437933aaa08325d0a3639e4a97476e",
+  "version": "0.2.9",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.9.zip",
+  "sha256": "d8a2a4da0e116f394b679886052a02a50f36100153f68d591893ef70b018b355",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Добавлена одна общая публичная подсказка на каждый раунд без раскрытия общей стоимости поля."
+  "releaseNotes": "Исправлена загрузка интерфейса после добавления публичных подсказок раунда."
 }
