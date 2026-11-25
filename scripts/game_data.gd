@@ -355,6 +355,15 @@ const SELLABLE_ITEMS: Dictionary = {
 	"ancient_empire_ark":     {"title": "Золотой ковчег древней империи", "size": Vector2i(3, 3), "quality": Rarity.LEGENDARY, "cost": 5500,  "chance_starter": 0.07,  "chance_mid": 0.27,  "chance_elite": 0.85},
 }
 
+## Ингредиенты алхимии. Каждый ингредиент занимает ровно 1×1 клетку.
+const ALCHEMY_INGREDIENTS: Dictionary = {
+	"alchemy_ingredient_common": {"title": "Обычная алхимическая трава", "size": Vector2i(1, 1), "quality": Rarity.COMMON, "cost": 80, "chance_starter": 4.0, "chance_mid": 3.0, "chance_elite": 2.0},
+	"alchemy_ingredient_uncommon": {"title": "Необычный алхимический корень", "size": Vector2i(1, 1), "quality": Rarity.UNCOMMON, "cost": 180, "chance_starter": 2.0, "chance_mid": 2.5, "chance_elite": 2.8},
+	"alchemy_ingredient_rare": {"title": "Редкий кристалл эссенции", "size": Vector2i(1, 1), "quality": Rarity.RARE, "cost": 400, "chance_starter": 0.8, "chance_mid": 1.4, "chance_elite": 2.1},
+	"alchemy_ingredient_epic": {"title": "Эпическое сердце мандрагоры", "size": Vector2i(1, 1), "quality": Rarity.EPIC, "cost": 900, "chance_starter": 0.2, "chance_mid": 0.6, "chance_elite": 1.1},
+	"alchemy_ingredient_legendary": {"title": "Легендарная звезда алхимика", "size": Vector2i(1, 1), "quality": Rarity.LEGENDARY, "cost": 2200, "chance_starter": 0.03, "chance_mid": 0.12, "chance_elite": 0.35},
+}
+
 # ============================================================
 #  ОБЩИЕ КОНСТАНТЫ
 # ============================================================

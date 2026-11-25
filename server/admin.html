@@ -36,6 +36,18 @@ input,textarea,select{width:100%}textarea{min-height:80px;resize:vertical}button
 </div>
 <div class="actions"><button onclick="saveItem()">Сохранить предмет</button><button onclick="clearForm()">Очистить форму</button><span id="status" class="muted"></span></div>
 </section>
+<section class="form">
+<h2>Настройки башен замка</h2>
+<div class="toolbar">
+<select id="towerId" onchange="fillTower()"><option value="coin_tower">Башня монет</option><option value="alchemy_tower">Башня алхимии</option></select>
+<input id="towerTitle" placeholder="Название башни">
+<input id="towerCosts" placeholder="Стоимость улучшений через запятую">
+<input id="towerIncome" placeholder="Доход в час через запятую">
+<input id="towerQualities" placeholder="Качество зелий по уровням через запятую">
+<textarea id="towerDescription" class="wide" placeholder="Описание башни"></textarea>
+</div>
+<div class="actions"><button onclick="loadTowers()">Загрузить настройки</button><button onclick="saveTower()">Сохранить башню</button><span id="towerStatus" class="muted"></span></div>
+</section>
 <h2>Все предметы в игре</h2>
 <div class="actions"><button onclick="loadItems()">Обновить каталог</button><span id="count" class="muted"></span></div>
 <div id="items"></div>
@@ -51,7 +63,12 @@ function editItem(index){fillForm(catalogItems[index])}
 function clearForm(){document.querySelectorAll('.form input,.form textarea').forEach(x=>{if(x.id!=='rarity')x.value=''});el('rarity').value=1;el('type').value='sellable';el('preview').src='';iconData=''}
 async function loadItems(){const r=await fetch('/api/v1/catalog/items');const d=await r.json();if(!r.ok){el('status').textContent=d.error||'Ошибка загрузки';return}catalogItems=d.items||[];el('count').textContent=`Предметов: ${catalogItems.length}`;el('items').innerHTML=catalogItems.map((x,index)=>`<div class="item"><img src="${esc(x.icon||x.iconPath||'')}" alt=""><div><b>${esc(x.name||x.id)}</b> <span class="muted">(${esc(x.id)})</span><br>Тип: ${esc(x.type||'—')}; качество: ${esc(rarity(x.rarity))}; стоимость: ${Number(x.baseCost||0)} монет<br>Размер: ${Number(x.sizeX||x.size?.x||1)}×${Number(x.sizeY||x.size?.y||1)} клетки<br>Шансы: ${Number(x.chances?.starter||0)} / ${Number(x.chances?.mid||0)} / ${Number(x.chances?.elite||0)}<br>${esc(x.description||'Описание отсутствует')}<br><span class="muted">Свойства: ${esc(typeof x.properties==='string'?x.properties:JSON.stringify(x.properties||'—'))}</span></div><div class="actions"><button onclick="editItem(${index})">Редактировать</button></div></div>`).join('')}
 async function saveItem(){const body={id:el('id').value.trim(),name:el('name').value.trim(),baseCost:Number(el('cost').value||0),type:el('type').value,rarity:Number(el('rarity').value||1),weaponKind:el('weaponKind').value.trim(),sizeX:Number(el('sizeX').value||1),sizeY:Number(el('sizeY').value||1),description:el('description').value,properties:el('properties').value,chances:{starter:Number(el('starter').value||0),mid:Number(el('mid').value||0),elite:Number(el('elite').value||0)}};if(iconData)body.icon=iconData;if(!body.id||!body.name){el('status').textContent='Укажите ID и название';return}const r=await fetch('/api/v1/admin/items',{method:'POST',headers:{'content-type':'application/json','x-admin-key':el('key').value},body:JSON.stringify(body)});const d=await r.json();el('status').textContent=d.error||'Сохранено';if(r.ok)loadItems()}
+let towerData={};
+function fillTower(){const x=towerData[el('towerId').value]||{};el('towerTitle').value=x.title||'';el('towerDescription').value=x.description||'';el('towerCosts').value=(x.upgradeCosts||[]).join(',');el('towerIncome').value=(x.incomePerHour||[]).join(',');el('towerQualities').value=(x.potionQualityByLevel||[]).join(',')}
+async function loadTowers(){const r=await fetch('/api/v1/admin/castle-towers',{headers:{'x-admin-key':el('key').value}});const d=await r.json();if(!r.ok){el('towerStatus').textContent=d.error||'Ошибка загрузки';return}towerData=d.towers||{};fillTower();el('towerStatus').textContent='Настройки загружены'}
+async function saveTower(){const id=el('towerId').value;const body={id,title:el('towerTitle').value,description:el('towerDescription').value,upgradeCosts:el('towerCosts').value.split(',').map(Number).filter(Number.isFinite)};if(id==='coin_tower')body.incomePerHour=el('towerIncome').value.split(',').map(Number).filter(Number.isFinite);if(id==='alchemy_tower')body.potionQualityByLevel=el('towerQualities').value.split(',').map(Number).filter(Number.isFinite);const r=await fetch('/api/v1/admin/castle-towers',{method:'POST',headers:{'content-type':'application/json','x-admin-key':el('key').value},body:JSON.stringify(body)});const d=await r.json();el('towerStatus').textContent=d.error||'Сохранено';if(r.ok){towerData=d.towers||{};fillTower()}}
 loadItems();
+loadTowers();
 </script>
 </body>
 </html>

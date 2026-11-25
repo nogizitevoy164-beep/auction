@@ -19,6 +19,10 @@ const POLICY_SUMMARIES = {
   rules: 'Правила игры: запрет читов, мультиаккаунтов, мошенничества и эксплуатации ошибок.',
   age: 'Возрастное ограничение: игрок подтверждает, что соответствует минимальному возрасту, установленному для игры.'
 };
+const DEFAULT_TOWER_DEFINITIONS = {
+  coin_tower: { title: 'Башня монет', description: 'Приносит пассивный доход, который можно забрать раз в сутки.', maxLevel: 5, upgradeCosts: [1000, 2000, 4000, 8000], incomePerHour: [100, 200, 350, 550, 800] },
+  alchemy_tower: { title: 'Башня алхимии', description: 'Позволяет создавать зелья качества от обычного до легендарного.', maxLevel: 5, upgradeCosts: [1500, 3500, 7000, 14000], potionQualityByLevel: [1, 2, 3, 4, 5] }
+};
 
 const seed = {
   nextPlayerId: 1,
@@ -45,6 +49,7 @@ function loadState() {
 }
 
 let state = loadState();
+if (!state.castleTowerDefinitions) state.castleTowerDefinitions = structuredClone(DEFAULT_TOWER_DEFINITIONS);
 let sockets = new Set();
 const MATCHMAKING_CAPACITY = 4;
 const matchmakingQueues = new Map();
@@ -99,6 +104,11 @@ function requirePlayer(req, res) {
   const player = auth(req);
   if (!player) { error(res, 401, 'Требуется авторизация'); return null; }
   return player;
+}
+
+function castleTowerDefinitions() {
+  if (!state.castleTowerDefinitions) state.castleTowerDefinitions = structuredClone(DEFAULT_TOWER_DEFINITIONS);
+  return state.castleTowerDefinitions;
 }
 
 function createAuctionRoom(tier, playerIds, botCount = 0) {
@@ -184,11 +194,15 @@ function broadcast(type, payload) {
 }
 
 function ensureCastle(player) {
-  if (!player.castle) player.castle = { level: 1, buildings: { coin_tower: { level: 1, storedCoins: 0, lastIncomeAt: Date.now() }, potion_tower: { level: 1 } } };
+  if (!player.castle) player.castle = { level: 1, buildings: { coin_tower: { level: 1, storedCoins: 0, lastIncomeAt: Date.now() }, alchemy_tower: { level: 1 } } };
+  if (!player.castle.buildings.alchemy_tower) player.castle.buildings.alchemy_tower = { level: 1 };
+  if (player.castle.buildings.potion_tower && !player.castle.buildings.alchemy_tower.level) player.castle.buildings.alchemy_tower = player.castle.buildings.potion_tower;
+  player.castle.towerDefinitions = castleTowerDefinitions();
   if (!player.potions) player.potions = [];
   const tower = player.castle.buildings.coin_tower;
   const elapsedHours = Math.max(0, (Date.now() - Number(tower.lastIncomeAt || Date.now())) / 3600000);
-  const incomePerHour = 100 * Number(tower.level || 1);
+  const incomeTable = castleTowerDefinitions().coin_tower.incomePerHour;
+  const incomePerHour = Number(incomeTable[Math.max(0, Math.min(incomeTable.length - 1, Number(tower.level || 1) - 1))] || 100);
   tower.storedCoins = Math.min(incomePerHour * 24, Number(tower.storedCoins || 0) + Math.floor(elapsedHours * incomePerHour));
   tower.lastIncomeAt = Date.now();
   return player.castle;
@@ -315,6 +329,22 @@ async function handle(req, res) {
       else state.itemDefinitions.push({ ...data, chances: data.chances || { starter: 0, mid: 0, elite: 0 } });
       saveState(); broadcast('catalog_updated', { id: data.id }); return json(res, 200, { items: state.itemDefinitions });
     }
+    if (req.method === 'GET' && url.pathname === '/api/v1/admin/castle-towers') {
+      if (req.headers['x-admin-key'] !== ADMIN_KEY) return error(res, 403, 'Нужны права администратора');
+      return json(res, 200, { towers: castleTowerDefinitions() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/v1/admin/castle-towers') {
+      if (req.headers['x-admin-key'] !== ADMIN_KEY) return error(res, 403, 'Нужны права администратора');
+      const data = await body(req); const towerId = String(data.id || '');
+      if (!castleTowerDefinitions()[towerId]) return error(res, 404, 'Башня не найдена');
+      const current = castleTowerDefinitions()[towerId];
+      if (data.title !== undefined) current.title = String(data.title);
+      if (data.description !== undefined) current.description = String(data.description);
+      if (Array.isArray(data.upgradeCosts)) current.upgradeCosts = data.upgradeCosts.map((value) => Math.max(0, Number(value) || 0));
+      if (Array.isArray(data.incomePerHour)) current.incomePerHour = data.incomePerHour.map((value) => Math.max(0, Number(value) || 0));
+      if (Array.isArray(data.potionQualityByLevel)) current.potionQualityByLevel = data.potionQualityByLevel.map((value) => Math.max(1, Math.min(5, Number(value) || 1)));
+      saveState(); return json(res, 200, { towers: castleTowerDefinitions() });
+    }
     const player = requirePlayer(req, res); if (!player) return;
     if (req.method === 'GET' && url.pathname === '/api/v1/me') return json(res, 200, publicPlayer(player));
     if (url.pathname === '/api/v1/matchmaking/status' && req.method === 'GET') {
@@ -382,14 +412,25 @@ async function handle(req, res) {
       player.coins += collected; tower.storedCoins = 0; saveState(); return json(res, 200, { collected, player: publicPlayer(player), castle });
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/castle/upgrade') {
-      const castle = ensureCastle(player); const tower = castle.buildings.coin_tower; const cost = Number(tower.level || 1) * 1000;
+      const castle = ensureCastle(player); const tower = castle.buildings.coin_tower; const definition = castleTowerDefinitions().coin_tower; const cost = Number(definition.upgradeCosts[Math.max(0, Number(tower.level || 1) - 1)] || 0);
+      if (Number(tower.level || 1) >= Number(definition.maxLevel || 5)) return error(res, 400, 'Башня уже максимального уровня');
+      if (player.coins < cost) return error(res, 400, 'Недостаточно монет для улучшения');
+      player.coins -= cost; tower.level += 1; saveState(); return json(res, 200, { cost, player: publicPlayer(player), castle });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/v1/castle/upgrade-alchemy') {
+      const castle = ensureCastle(player); const tower = castle.buildings.alchemy_tower; const definition = castleTowerDefinitions().alchemy_tower; const cost = Number(definition.upgradeCosts[Math.max(0, Number(tower.level || 1) - 1)] || 0);
+      if (Number(tower.level || 1) >= Number(definition.maxLevel || 5)) return error(res, 400, 'Башня уже максимального уровня');
       if (player.coins < cost) return error(res, 400, 'Недостаточно монет для улучшения');
       player.coins -= cost; tower.level += 1; saveState(); return json(res, 200, { cost, player: publicPlayer(player), castle });
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/potions') { ensureCastle(player); return json(res, 200, { potions: player.potions }); }
     if (req.method === 'POST' && url.pathname === '/api/v1/potions/craft') {
-      const castle = ensureCastle(player); const level = Number(castle.buildings.potion_tower.level || 1);
-      const potion = { id: id(), recipeId: 'healing_potion', name: 'Зелье восстановления', quality: Math.min(level, 5), state: 'inventory', createdAt: new Date().toISOString() };
+      const castle = ensureCastle(player); const level = Number(castle.buildings.alchemy_tower.level || 1); const definition = castleTowerDefinitions().alchemy_tower;
+      const maxQuality = Number(definition.potionQualityByLevel[Math.max(0, Math.min(4, level - 1))] || level);
+      const ingredientIndex = (player.inventory || []).findIndex((item) => item.state === 'inventory' && item.type === 'ingredient' && Number(item.quality || 1) <= maxQuality);
+      if (ingredientIndex < 0) return error(res, 400, `Нужен ингредиент качества не выше ${maxQuality}`);
+      const ingredient = player.inventory.splice(ingredientIndex, 1)[0];
+      const potion = { id: id(), recipeId: 'reveal_item', name: 'Зелье откровения', quality: Math.min(Number(ingredient.quality || 1), maxQuality), baseCost: 250 * Math.min(Number(ingredient.quality || 1), maxQuality), type: 'potion', effect: 'Открывает информацию об одном предмете на поле', state: 'inventory', createdAt: new Date().toISOString() };
       player.potions.push(potion); saveState(); return json(res, 201, { potion, player: publicPlayer(player) });
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/sell') {
@@ -398,6 +439,16 @@ async function handle(req, res) {
       const item = player.inventory[index]; const price = Math.max(1, Math.floor(Number(item.baseCost || 0) * 0.7));
       player.inventory.splice(index, 1); player.coins += price; saveState();
       return json(res, 200, { price, player: publicPlayer(player) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/v1/inventory/sell-all-simple') {
+      let soldCount = 0; let total = 0;
+      player.inventory = (player.inventory || []).filter((item) => {
+        const itemType = String(item.type || '').toLowerCase();
+        const isSimple = item.state === 'inventory' && !['equipment', 'weapon', 'potion', 'ingredient'].includes(itemType) && !item.gearClassId && !item.gear_class_id;
+        if (!isSimple) return true;
+        soldCount += 1; total += Math.max(1, Math.floor(Number(item.baseCost || item.cost || 0) * 0.7)); return false;
+      });
+      player.coins += total; saveState(); return json(res, 200, { soldCount, total, player: publicPlayer(player) });
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/equipment/equip') {
       const data = await body(req); const item = player.inventory.find((x) => x.id === data.instanceId && x.state === 'inventory');

@@ -53,6 +53,7 @@ var _tier_overlay: PanelContainer
 ## Подпись с золотом игрока на экране выбора.
 var _tier_gold_label: Label
 var _auction_result_label: Label
+var _sell_simple_after_win_button: Button
 var _last_auction_summary: String = ""
 ## Кнопки входа на поля: FieldTier -> Button.
 var _tier_buttons: Dictionary = {}
@@ -502,9 +503,13 @@ func _load_castle_view() -> void:
 		return
 	var castle: Dictionary = response.get("data", {})
 	var tower: Dictionary = castle.get("buildings", {}).get("coin_tower", {})
+	var definitions: Dictionary = castle.get("towerDefinitions", {})
+	var coin_definition: Dictionary = definitions.get("coin_tower", {})
 	var info := Label.new()
-	info.text = "Башня монет — уровень %d\nНакоплено: %d монет\nДоход: %d монет/час" % [
-		int(tower.get("level", 1)), int(tower.get("storedCoins", 0)), int(tower.get("level", 1)) * 100]
+	var coin_level := int(tower.get("level", 1))
+	var coin_cost := int(coin_definition.get("upgradeCosts", [])[mini(coin_level - 1, 3)]) if coin_level < int(coin_definition.get("maxLevel", 5)) else 0
+	info.text = "%s — уровень %d/%d\n%s\nНакоплено: %d монет\nДоход: %d монет/час\nУлучшение: %d монет" % [
+		String(coin_definition.get("title", "Башня монет")), coin_level, int(coin_definition.get("maxLevel", 5)), String(coin_definition.get("description", "")), int(tower.get("storedCoins", 0)), int(coin_definition.get("incomePerHour", [100])[mini(coin_level - 1, 4)]), coin_cost]
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(info)
 	var collect := Button.new()
@@ -515,6 +520,21 @@ func _load_castle_view() -> void:
 	upgrade.text = "Улучшить башню"
 	upgrade.pressed.connect(_upgrade_coin_tower)
 	box.add_child(upgrade)
+	var alchemy: Dictionary = castle.get("buildings", {}).get("alchemy_tower", {})
+	var alchemy_definition: Dictionary = definitions.get("alchemy_tower", {})
+	var alchemy_level := int(alchemy.get("level", 1))
+	var alchemy_cost := int(alchemy_definition.get("upgradeCosts", [])[mini(alchemy_level - 1, 3)]) if alchemy_level < int(alchemy_definition.get("maxLevel", 5)) else 0
+	var alchemy_info := Label.new()
+	alchemy_info.text = "%s — уровень %d/%d\n%s\nДоступно качество зелий: %d\nУлучшение: %d монет" % [
+		String(alchemy_definition.get("title", "Башня алхимии")), alchemy_level, int(alchemy_definition.get("maxLevel", 5)), String(alchemy_definition.get("description", "")), alchemy_level, alchemy_cost]
+	alchemy_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	alchemy_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(alchemy_info)
+	var upgrade_alchemy := Button.new()
+	upgrade_alchemy.text = "Улучшить башню алхимии"
+	upgrade_alchemy.disabled = alchemy_level >= int(alchemy_definition.get("maxLevel", 5))
+	upgrade_alchemy.pressed.connect(_upgrade_alchemy_tower)
+	box.add_child(upgrade_alchemy)
 
 
 func _collect_castle_income() -> void:
@@ -537,6 +557,16 @@ func _upgrade_coin_tower() -> void:
 	_load_castle_view()
 
 
+func _upgrade_alchemy_tower() -> void:
+	var result: Dictionary = await _server_client.upgrade_alchemy_tower()
+	if not result.get("ok", false):
+		add_log("[Замок] Не удалось улучшить башню алхимии.")
+		return
+	_apply_server_profile(result.get("data", {}).get("player", {}))
+	add_log("[Замок] Башня алхимии улучшена.")
+	_load_castle_view()
+
+
 func _load_potions_view() -> void:
 	if not _server_connected:
 		return
@@ -547,7 +577,7 @@ func _load_potions_view() -> void:
 	title.add_theme_font_size_override("font_size", 24)
 	box.add_child(title)
 	var description := Label.new()
-	description.text = "Создание зелья через сервер"
+	description.text = "Зелье откровения открывает информацию об одном предмете на игровом поле. Для создания нужен ингредиент из инвентаря."
 	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(description)
 	var craft := Button.new()
@@ -743,6 +773,13 @@ func _local_catalog_items() -> Array:
 			gear["description"] = equip.ability_description()
 			gear["properties"] = "Слот: %s" % GameData.SLOT_NAMES[equip.slot()]
 			result.append(gear)
+	for ingredient_id: String in GameData.ALCHEMY_INGREDIENTS:
+		var ingredient: Dictionary = GameData.ALCHEMY_INGREDIENTS[ingredient_id].duplicate(true)
+		ingredient["id"] = ingredient_id
+		ingredient["type"] = "ingredient"
+		ingredient["baseCost"] = int(ingredient.get("cost", 0))
+		ingredient["description"] = "Ингредиент для Башни алхимии."
+		result.append(ingredient)
 	return result
 
 
@@ -1143,6 +1180,11 @@ func _setup_field_selection() -> void:
 	_auction_result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_auction_result_label.visible = false
 	vbox.add_child(_auction_result_label)
+	_sell_simple_after_win_button = Button.new()
+	_sell_simple_after_win_button.text = "Продать все простые предметы"
+	_sell_simple_after_win_button.visible = false
+	_sell_simple_after_win_button.pressed.connect(_sell_all_simple_after_win)
+	vbox.add_child(_sell_simple_after_win_button)
 	_tier_gold_label = Label.new()
 	_tier_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(_tier_gold_label)
@@ -1514,6 +1556,9 @@ func _place_tier_items(count: int, field_seed: int = -1) -> void:
 				"item": gear_item,
 				"weight": _gear_field_weight(gear_id, quality),
 			})
+	for ingredient_id: String in GameData.ALCHEMY_INGREDIENTS:
+		var ingredient: Dictionary = GameData.ALCHEMY_INGREDIENTS[ingredient_id].duplicate(true)
+		pool.append({"id": ingredient_id, "item": _make_field_ingredient_item(ingredient), "weight": float(ingredient.get(chance_key, 0.0))})
 	var picked: Array[Dictionary] = []
 	for i: int in mini(count, pool.size()):
 		var total_weight := 0.0
@@ -1571,6 +1616,17 @@ func _make_field_gear_item(gear_id: String, quality: int) -> Dictionary:
 		"gear_class_id": gear_id,
 		"size": Vector2i(info["size"]),
 		"description": equip.ability_description(),
+	}
+
+
+func _make_field_ingredient_item(info: Dictionary) -> Dictionary:
+	return {
+		"title": String(info.get("title", "Ингредиент")),
+		"cost": int(info.get("cost", 0)),
+		"quality": int(info.get("quality", 1)),
+		"type": "ingredient",
+		"size": Vector2i(1, 1),
+		"description": "Ингредиент для Башни алхимии.",
 	}
 
 
@@ -1716,6 +1772,9 @@ func _settle_auction() -> void:
 		_auction_result_label.text = _last_auction_summary
 		_auction_result_label.visible = true
 	var local_player_id := _server_player_id if not _online_room_id.is_empty() else 1
+	if _sell_simple_after_win_button != null:
+		_sell_simple_after_win_button.visible = winner == local_player_id and winning_bid > 0
+		_sell_simple_after_win_button.disabled = false
 	if winner != local_player_id or winning_bid <= 0:
 		add_log("[Игра] Лот выиграл %s. Ваши предметы не изменились." % _player_name(winner))
 		return
@@ -1774,6 +1833,33 @@ func _show_field_selection_in_game_area() -> void:
 		_auction_result_label.text = _last_auction_summary
 		_auction_result_label.visible = not _last_auction_summary.is_empty()
 	_refresh_tier_buttons()
+
+
+func _sell_all_simple_after_win() -> void:
+	if _server_connected:
+		var result: Dictionary = await _server_client.sell_all_simple_items()
+		if not result.get("ok", false):
+			add_log("[Инвентарь] Не удалось продать простые предметы.")
+			return
+		_apply_server_profile(result.get("data", {}).get("player", {}))
+		add_log("[Инвентарь] Продано простых предметов: %d, получено: %d монет." % [int(result.get("data", {}).get("soldCount", 0)), int(result.get("data", {}).get("total", 0))])
+	else:
+		var total := 0
+		var sold_count := 0
+		for index in range(inventory.size() - 1, -1, -1):
+			var item: Dictionary = inventory[index]
+			if _is_equipment_item(item) or String(item.get("type", "")) in ["potion", "ingredient", "weapon"]:
+				continue
+			total += maxi(1, int(floor(float(item.get("cost", item.get("baseCost", 0))) * 0.7)))
+			inventory.remove_at(index)
+			sold_count += 1
+		players[0].gold += total
+		SaveDataS.save_game(players[0].gold, inventory)
+		_refresh_inventory()
+		_refresh_tier_buttons()
+		add_log("[Инвентарь] Продано простых предметов: %d, получено: %d монет." % [sold_count, total])
+	if _sell_simple_after_win_button != null:
+		_sell_simple_after_win_button.disabled = true
 
 
 func _player_name(player_id: int) -> String:

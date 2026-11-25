@@ -82,6 +82,10 @@ func sell_to_server(instance_id: String) -> Dictionary:
 		{"instanceId": instance_id})
 
 
+func sell_all_simple_items() -> Dictionary:
+	return await _request_json("/api/v1/inventory/sell-all-simple", HTTPClient.METHOD_POST, {})
+
+
 func claim_field_item(item: Dictionary) -> Dictionary:
 	return await _request_json("/api/v1/inventory/claim-field-item", HTTPClient.METHOD_POST, item)
 
@@ -120,6 +124,10 @@ func collect_castle_income() -> Dictionary:
 
 func upgrade_coin_tower() -> Dictionary:
 	return await _request_json("/api/v1/castle/upgrade", HTTPClient.METHOD_POST, {})
+
+
+func upgrade_alchemy_tower() -> Dictionary:
+	return await _request_json("/api/v1/castle/upgrade-alchemy", HTTPClient.METHOD_POST, {})
 
 
 func craft_potion() -> Dictionary:
