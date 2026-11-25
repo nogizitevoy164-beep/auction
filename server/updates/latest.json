@@ -1,8 +1,8 @@
 {
-  "version": "0.2.7",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.7.zip",
-  "sha256": "9dfe8f89b9ed1ae2172ebd9a31a811715d6a49f9942f79f65534619a6a7fbca7",
+  "version": "0.2.8",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.8.zip",
+  "sha256": "4d6766c9043c7fa576e44e11758363882e437933aaa08325d0a3639e4a97476e",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Изображения предметов появляются после полного раскрытия; скрытые предметы показывают только тип, размер и качество."
+  "releaseNotes": "Добавлена одна общая публичная подсказка на каждый раунд без раскрытия общей стоимости поля."
 }

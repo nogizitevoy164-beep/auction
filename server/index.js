@@ -171,7 +171,7 @@ function publicAuctionRoom(room) {
     const profile = state.players.find((player) => player.id === entry.id);
     return { id: entry.id, displayName: entry.isBot ? entry.name : (profile?.displayName || profile?.login || 'Игрок'), isBot: entry.isBot, coins: profile?.coins || 0, bid: room.bids[String(entry.id)], hasActed: Object.prototype.hasOwnProperty.call(room.bids, String(entry.id)) };
   });
-  return { roomId: room.id, tier: room.tier, fieldSeed: room.fieldSeed, status: room.status, round: room.round, roundEndsAt: room.roundEndsAt, serverNow: Date.now(), bids: room.bids, previousBids: room.previousBids, winnerId: room.winnerId, winningBid: room.winningBid, players };
+  return { roomId: room.id, tier: room.tier, fieldSeed: room.fieldSeed, clueSeed: room.fieldSeed, status: room.status, round: room.round, roundEndsAt: room.roundEndsAt, serverNow: Date.now(), bids: room.bids, previousBids: room.previousBids, winnerId: room.winnerId, winningBid: room.winningBid, players };
 }
 
 function matchmakingStatus(tier, playerId = 0) {

@@ -35,6 +35,10 @@ var _selected_role: String = "warrior"
 var _role_locked: bool = false
 var _equipped_items: Dictionary = {}
 var _field_rules: Dictionary = {"registeredPlayers": 1, "legendaryCounts": {}}
+## Одна публичная подсказка на раунд, сформированная при создании поля.
+var _round_clues: Array[String] = []
+var _clue_seed: int = -1
+var _round_clue_label: Label
 var _auction_settled: bool = false
 ## Ставки предыдущего завершённого раунда, доступные для отображения.
 var _revealed_round_bids: Dictionary = {}
@@ -147,6 +151,7 @@ func _ready() -> void:
 	_setup_inventory_panel()
 	_setup_central_navigation()
 	_setup_field_selection()
+	_setup_round_clue_label()
 	_setup_calc()
 	_server_client = ServerClientS.new()
 	add_child(_server_client)
@@ -1281,6 +1286,8 @@ func _on_tier_selected(tier: int) -> void:
 func _show_matchmaking_view(info: Dictionary) -> void:
 	_round_timer.stop()
 	round_info_panel.visible = false
+	if _round_clue_label != null:
+		_round_clue_label.visible = false
 	field_hbox.visible = false
 	_central_view_host.visible = true
 	var box := _replace_central_box()
@@ -1371,6 +1378,8 @@ func _start_auction_after_matchmaking() -> void:
 	var info: Dictionary = GameData.FIELD_TIERS[_matchmaking_tier]
 	_show_central_view("auction")
 	_round_timer.stop()
+	if _round_clue_label != null:
+		_round_clue_label.visible = true
 	auction_field_name = String(info["title"])
 	add_log("[Игра] Вы вошли на «%s» (вход от %d монет)." % [auction_field_name, int(info["min_gold"])])
 	_place_tier_items(int(info["lot_count"]))
@@ -1395,6 +1404,8 @@ func _start_online_auction() -> void:
 	var info: Dictionary = GameData.FIELD_TIERS[_matchmaking_tier]
 	_show_central_view("auction")
 	round_info_panel.visible = true
+	if _round_clue_label != null:
+		_round_clue_label.visible = true
 	field_hbox.visible = true
 	game_field.visible = true
 	game_field_panel.visible = true
@@ -1491,6 +1502,74 @@ func update_round_info_from_state(field_name: String, current_round: int) -> voi
 	if current_round >= 1 and current_round <= multipliers.size():
 		multiplier = multipliers[current_round - 1]
 	update_round_info(field_name, current_round, multiplier)
+	_update_round_clue(current_round)
+
+
+func _setup_round_clue_label() -> void:
+	_round_clue_label = Label.new()
+	_round_clue_label.name = "RoundClueLabel"
+	_round_clue_label.custom_minimum_size = Vector2(0, 30)
+	_round_clue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_round_clue_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_round_clue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_round_clue_label.add_theme_font_size_override("font_size", 15)
+	_round_clue_label.text = "Публичное свойство раунда: —"
+	center_column.add_child(_round_clue_label)
+	center_column.move_child(_round_clue_label, round_info_panel.get_index() + 1)
+	_round_clue_label.visible = false
+
+
+## Создаёт пять подсказок без общей стоимости поля. Одинаковый seed
+## гарантирует одинаковый результат у всех клиентов онлайн-комнаты.
+func _build_round_clues(seed: int) -> void:
+	_clue_seed = seed if seed >= 0 else 1
+	var pool: Array[String] = []
+	var quality_counts: Dictionary = {}
+	var type_counts: Dictionary = {}
+	var size_counts: Dictionary = {}
+	for item: Dictionary in field_items:
+		var quality := int(item.get("quality", 1))
+		quality_counts[quality] = int(quality_counts.get(quality, 0)) + 1
+		var item_type := String(item.get("type", "Предмет"))
+		type_counts[item_type] = int(type_counts.get(item_type, 0)) + 1
+		var size := "%d×%d" % [int(item.get("w", 1)), int(item.get("h", 1))]
+		size_counts[size] = int(size_counts.get(size, 0)) + 1
+	pool.append("На поле находится %d предметов." % field_items.size())
+	for quality: int in range(1, 6):
+		if quality_counts.has(quality):
+			pool.append("На поле находится %d предметов качества «%s»." % [int(quality_counts[quality]), GameData.QUALITY_NAMES[quality]])
+	for item_type: String in type_counts:
+		pool.append("На поле находится %d предметов типа «%s»." % [int(type_counts[item_type]), _item_type_label(item_type)])
+	for size: String in size_counts:
+		pool.append("На поле находится %d предметов размером %s клеток." % [int(size_counts[size]), size])
+	if field_items.size() >= 2:
+		var reveal_rng := RandomNumberGenerator.new()
+		reveal_rng.seed = abs(_clue_seed) + 901
+		var first := field_items[reveal_rng.randi_range(0, field_items.size() - 1)]
+		var second := field_items[reveal_rng.randi_range(0, field_items.size() - 1)]
+		pool.append("Раскрыта информация о двух предметах: «%s» — %s, %s, %d×%d; «%s» — %s, %s, %d×%d." % [
+			String(first.get("title", "Предмет")), GameData.QUALITY_NAMES[int(first.get("quality", 1))], _item_type_label(String(first.get("type", "Предмет"))), int(first.get("w", 1)), int(first.get("h", 1)),
+			String(second.get("title", "Предмет")), GameData.QUALITY_NAMES[int(second.get("quality", 1))], _item_type_label(String(second.get("type", "Предмет"))), int(second.get("w", 1)), int(second.get("h", 1))])
+	pool.append("В этом раунде дополнительная информация о предметах не раскрывается.")
+	_round_clues.clear()
+	var clue_rng := RandomNumberGenerator.new()
+	clue_rng.seed = abs(_clue_seed) + 1777
+	for index: int in 5:
+		if pool.is_empty():
+			break
+		var chosen := clue_rng.randi_range(0, pool.size() - 1)
+		_round_clues.append(pool[chosen])
+		pool.remove_at(chosen)
+	_update_round_clue(_field_round)
+
+
+func _update_round_clue(round_number: int) -> void:
+	if _round_clue_label == null:
+		return
+	if round_number >= 1 and round_number <= _round_clues.size():
+		_round_clue_label.text = "Публичное свойство раунда: %s" % _round_clues[round_number - 1]
+	else:
+		_round_clue_label.text = "Публичное свойство раунда: —"
 
 
 ## slot_node_name — один из ключей EQUIP_SLOT_LABELS (например "SlotWeapon").
@@ -1641,6 +1720,7 @@ func _place_tier_items(count: int, field_seed: int = -1) -> void:
 		})
 		col += item_size.x + 1
 		shelf_h = maxi(shelf_h, item_size.y)
+	_build_round_clues(field_seed if field_seed >= 0 else _item_rng.randi())
 	rebuild_field()
 	var titles: Array[String] = []
 	for placed: Dictionary in field_items:
@@ -1884,6 +1964,8 @@ func _show_field_selection_in_game_area() -> void:
 	_set_role_locked(false)
 	main_hbox.visible = true
 	round_info_panel.visible = true
+	if _round_clue_label != null:
+		_round_clue_label.visible = false
 	field_hbox.visible = true
 	game_field_panel.visible = true
 	game_field.visible = true
