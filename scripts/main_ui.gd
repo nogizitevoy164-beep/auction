@@ -449,6 +449,12 @@ func _show_central_view(view_id: String) -> void:
 	round_info_panel.visible = is_auction
 	field_hbox.visible = is_auction
 	_central_view_host.visible = not is_auction
+	if is_auction and _tier_overlay != null:
+		# Возвращаем выбор поля при входе во вкладку «Аукцион», если
+		# текущий аукцион ещё не начат или предыдущий уже завершён.
+		_tier_overlay.visible = current_tier < 0 or _auction_finished
+		if _tier_overlay.visible and _round_clue_label != null:
+			_round_clue_label.visible = false
 	if not is_auction:
 		for child in _central_view_host.get_children():
 			child.queue_free()
