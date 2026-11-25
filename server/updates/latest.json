@@ -1,7 +1,7 @@
 {
   "version": "0.2.15",
   "download": "https://www.arh.seaetr.online/updates/Auction_0.2.15.zip",
-  "sha256": "D322A3250C30A3951090B0DF1881543D715DBB1E7F85067F0A928E0031C556EF",
+  "sha256": "1C05934E35A433C23C2BF1A9D84B15BEC9D8527EF8C3132564C4894DDA48A079",
   "mandatory": false,
   "minClientVersion": "0.2.0",
   "releaseNotes": "Исправлено отображение изображений всех предметов в каталоге игры и админке."

@@ -4,4 +4,5 @@
 /server/data/*.json
 /server/node_modules/
 /server/.env
+/server/admin-assets/*.import
 /auction-deploy.tar.gz
