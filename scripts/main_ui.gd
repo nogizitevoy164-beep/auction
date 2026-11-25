@@ -121,6 +121,7 @@ var _matchmaking_status_label: Label
 var _matchmaking_active: bool = false
 var _online_room_id: String = ""
 var _online_sync_timer: Timer
+var _online_last_round: int = -1
 
 # ==================== ИГРОКИ И БОТЫ ====================
 ## Имена ботов (текущий игрок — «Вы», всегда верхняя иконка).
@@ -1307,6 +1308,7 @@ func _start_online_auction() -> void:
 	_place_tier_items(int(info["lot_count"]), int(snapshot.get("fieldSeed", 0)))
 	_auction_settled = false
 	_auction_finished = false
+	_online_last_round = -1
 	_apply_online_room_snapshot(snapshot)
 	if not _online_room_id.is_empty():
 		_round_timer.start()
@@ -1349,6 +1351,10 @@ func _apply_online_room_snapshot(snapshot: Dictionary) -> void:
 	for key: Variant in previous_bids:
 		_revealed_round_bids[int(key)] = int(previous_bids[key])
 	_round_bids_visible = String(snapshot.get("status", "active")) == "finished" or not previous_bids.is_empty()
+	if _online_last_round != _field_round:
+		var previous_local_bid := int(previous_bids.get(str(_server_player_id), 0))
+		_prefill_calc(previous_local_bid)
+		_online_last_round = _field_round
 	update_round_info_from_state(auction_field_name, _field_round)
 	if game_field.current_round != _field_round:
 		game_field.reveal_for_round(_field_round, int(snapshot.get("fieldSeed", -1)) if not _online_room_id.is_empty() else -1)
