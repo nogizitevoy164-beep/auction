@@ -1,8 +1,8 @@
 {
-  "version": "0.2.14",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.14.zip",
-  "sha256": "F394F00137DE9E755BB6437170757A74339EFE8B2860B2BDEDD50A9901E161C3",
+  "version": "0.2.15",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.15.zip",
+  "sha256": "D322A3250C30A3951090B0DF1881543D715DBB1E7F85067F0A928E0031C556EF",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Добавлены новые изображения экипировки; цвет рамки и свечения зависит от качества предмета."
+  "releaseNotes": "Исправлено отображение изображений всех предметов в каталоге игры и админке."
 }

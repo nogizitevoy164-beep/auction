@@ -932,7 +932,9 @@ func _catalog_icon(item: Dictionary) -> TextureRect:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	var icon_value := String(item.get("icon", item.get("iconPath", "")))
-	if icon_value.is_empty():
+	# Серверные iconPath указывают на HTTP-адрес админки. Клиент не загружает
+	# их напрямую: используем локальный ресурс с тем же definition_id.
+	if icon_value.is_empty() or (not icon_value.begins_with("res://") and not icon_value.begins_with("data:image/")):
 		icon_value = _field_icon_path({
 			"definition_id": String(item.get("baseId", item.get("id", ""))),
 			"gear_class_id": String(item.get("baseId", item.get("gear_class_id", ""))),
