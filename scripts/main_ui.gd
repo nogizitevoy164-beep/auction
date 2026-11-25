@@ -2031,7 +2031,7 @@ func _sell_all_simple_after_win() -> void:
 			var item: Dictionary = inventory[index]
 			if _is_equipment_item(item) or String(item.get("type", "")) in ["potion", "ingredient", "weapon"]:
 				continue
-			total += maxi(1, int(floor(float(item.get("cost", item.get("baseCost", 0))) * 0.7)))
+			total += maxi(0, int(round(float(item.get("cost", item.get("baseCost", 0))))))
 			inventory.remove_at(index)
 			sold_count += 1
 		players[0].gold += total

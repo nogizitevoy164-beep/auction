@@ -4,7 +4,8 @@ extends RefCounted
 ## Файл находится в user:// и не попадает в репозиторий.
 
 const SAVE_PATH := "user://auction_save.json"
-const SELL_RATE := 0.70
+## Продажа предмета NPC/системе проходит ровно по его установленной стоимости.
+const SELL_RATE := 1.0
 
 static func load_game() -> Dictionary:
 	if not FileAccess.file_exists(SAVE_PATH):
@@ -25,4 +26,4 @@ static func save_game(gold: int, inventory: Array) -> void:
 
 
 static func sell_price(item: Dictionary) -> int:
-	return maxi(1, int(floor(float(item.get("cost", 0)) * SELL_RATE)))
+	return maxi(0, int(round(float(item.get("cost", item.get("baseCost", 0))) * SELL_RATE)))

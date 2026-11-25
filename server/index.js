@@ -469,7 +469,7 @@ async function handle(req, res) {
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/sell') {
       const data = await body(req); const index = player.inventory.findIndex((x) => x.id === data.instanceId && x.state === 'inventory');
       if (index < 0) return error(res, 404, 'Предмет не найден в инвентаре');
-      const item = player.inventory[index]; const price = Math.max(1, Math.floor(Number(item.baseCost || 0) * 0.7));
+      const item = player.inventory[index]; const price = Math.max(0, Math.round(Number(item.baseCost ?? item.cost ?? 0)));
       player.inventory.splice(index, 1); player.coins += price; saveState();
       return json(res, 200, { price, player: publicPlayer(player) });
     }
@@ -479,7 +479,7 @@ async function handle(req, res) {
         const itemType = String(item.type || '').toLowerCase();
         const isSimple = item.state === 'inventory' && !['equipment', 'weapon', 'potion', 'ingredient'].includes(itemType) && !item.gearClassId && !item.gear_class_id;
         if (!isSimple) return true;
-        soldCount += 1; total += Math.max(1, Math.floor(Number(item.baseCost || item.cost || 0) * 0.7)); return false;
+        soldCount += 1; total += Math.max(0, Math.round(Number(item.baseCost ?? item.cost ?? 0))); return false;
       });
       player.coins += total; saveState(); return json(res, 200, { soldCount, total, player: publicPlayer(player) });
     }

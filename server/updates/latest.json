@@ -1,8 +1,8 @@
 {
-  "version": "0.2.10",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.10.zip",
-  "sha256": "eb4fc0f0cfb67fffd0a018ea7ff9289b8aaa78cb60bae64354fd34eea4f67a77",
+  "version": "0.2.11",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.11.zip",
+  "sha256": "08517ec2148ad32af36b4d790abad6f858b38335ea7113bfa268a660a15c91f5",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Переплата победителя равномерно распределяется между остальными участниками аукциона."
+  "releaseNotes": "Продажа предметов теперь выполняется ровно по их стоимости без скидки."
 }
