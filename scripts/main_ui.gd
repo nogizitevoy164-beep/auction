@@ -52,6 +52,8 @@ var _item_rng := RandomNumberGenerator.new()
 var _tier_overlay: PanelContainer
 ## Подпись с золотом игрока на экране выбора.
 var _tier_gold_label: Label
+var _auction_result_label: Label
+var _last_auction_summary: String = ""
 ## Кнопки входа на поля: FieldTier -> Button.
 var _tier_buttons: Dictionary = {}
 
@@ -1136,6 +1138,11 @@ func _setup_field_selection() -> void:
 	title.add_theme_font_size_override("font_size", 32)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
+	_auction_result_label = Label.new()
+	_auction_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_auction_result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_auction_result_label.visible = false
+	vbox.add_child(_auction_result_label)
 	_tier_gold_label = Label.new()
 	_tier_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(_tier_gold_label)
@@ -1694,10 +1701,20 @@ func _settle_auction() -> void:
 	_auction_finished = true
 	var winner := -1
 	var winning_bid := 0
+	var total_lot_value := 0
+	for item: Dictionary in field_items:
+		total_lot_value += int(item.get("cost", 0))
 	for p: PlayerDataS in players:
 		if p.last_bid > winning_bid:
 			winner = p.id
 			winning_bid = p.last_bid
+	var difference := total_lot_value - winning_bid
+	var result_word := "ПЛЮС" if difference >= 0 else "МИНУС"
+	_last_auction_summary = "Итоги аукциона\nСтоимость всех лотов: %d монет\nСтавка победителя: %d монет\nРазница: %s%d монет — %s\nПобедитель: %s" % [
+		total_lot_value, winning_bid, "+" if difference >= 0 else "", difference, result_word, _player_name(winner)]
+	if _auction_result_label != null:
+		_auction_result_label.text = _last_auction_summary
+		_auction_result_label.visible = true
 	var local_player_id := _server_player_id if not _online_room_id.is_empty() else 1
 	if winner != local_player_id or winning_bid <= 0:
 		add_log("[Игра] Лот выиграл %s. Ваши предметы не изменились." % _player_name(winner))
@@ -1753,6 +1770,9 @@ func _show_field_selection_in_game_area() -> void:
 	game_field_panel.visible = true
 	game_field.visible = true
 	_tier_overlay.visible = true
+	if _auction_result_label != null:
+		_auction_result_label.text = _last_auction_summary
+		_auction_result_label.visible = not _last_auction_summary.is_empty()
 	_refresh_tier_buttons()
 
 
