@@ -115,7 +115,7 @@ function createAuctionRoom(tier, playerIds, botCount = 0) {
   const room = {
     id: id(), tier: Number(tier), fieldSeed: crypto.randomInt(1, 2147483647),
     status: 'active', round: 1, roundEndsAt: Date.now() + 40000,
-    bids: {}, previousBids: {}, winnerId: null, winningBid: 0, settled: false,
+    bids: {}, previousBids: {}, winnerId: null, winningBid: 0, lotValue: null, deficit: 0, redistribution: {}, settled: false,
     players: playerIds.map((playerId) => ({ id: playerId, isBot: false })), botReadyAt: {}
   };
   for (let index = 0; index < botCount; index += 1) {
@@ -153,16 +153,39 @@ function processAuctionRoom(room) {
   }
   if (room.round >= 5) {
     room.status = 'finished';
-    if (!room.settled && room.winnerId > 0) {
-      const winner = state.players.find((player) => player.id === room.winnerId);
-      if (winner) winner.coins = Math.max(0, Number(winner.coins || 0) - room.winningBid);
-      room.settled = true;
-      saveState();
-    }
+    settleAuctionRoom(room);
     return;
   }
   room.round += 1; room.bids = {}; room.roundEndsAt = Date.now() + 40000;
   for (const entry of room.players) if (entry.isBot) room.botReadyAt[String(entry.id)] = Date.now() + 500 + ((room.fieldSeed + room.round * 701 + Math.abs(entry.id) * 137) % 4500);
+}
+
+function settleAuctionRoom(room) {
+  if (!room || room.settled) return;
+  const lotValue = Math.max(0, Number(room.lotValue || 0));
+  const deficit = Math.max(0, Number(room.winningBid || 0) - lotValue);
+  room.deficit = deficit;
+  room.redistribution = {};
+  const winnerId = Number(room.winnerId || 0);
+  const recipients = room.players.filter((entry) => Number(entry.id) !== winnerId);
+  if (winnerId > 0) {
+    const winner = state.players.find((player) => player.id === winnerId);
+    if (winner) winner.coins = Math.max(0, Number(winner.coins || 0) - Number(room.winningBid || 0));
+  }
+  if (deficit > 0 && recipients.length > 0) {
+    const share = Math.floor(deficit / recipients.length);
+    const remainder = deficit % recipients.length;
+    recipients.forEach((entry, index) => {
+      const amount = share + (index < remainder ? 1 : 0);
+      room.redistribution[String(entry.id)] = amount;
+      if (entry.id > 0 && amount > 0) {
+        const player = state.players.find((candidate) => candidate.id === entry.id);
+        if (player) player.coins = Number(player.coins || 0) + amount;
+      }
+    });
+  }
+  room.settled = true;
+  saveState();
 }
 
 function publicAuctionRoom(room) {
@@ -171,7 +194,7 @@ function publicAuctionRoom(room) {
     const profile = state.players.find((player) => player.id === entry.id);
     return { id: entry.id, displayName: entry.isBot ? entry.name : (profile?.displayName || profile?.login || 'Игрок'), isBot: entry.isBot, coins: profile?.coins || 0, bid: room.bids[String(entry.id)], hasActed: Object.prototype.hasOwnProperty.call(room.bids, String(entry.id)) };
   });
-  return { roomId: room.id, tier: room.tier, fieldSeed: room.fieldSeed, clueSeed: room.fieldSeed, status: room.status, round: room.round, roundEndsAt: room.roundEndsAt, serverNow: Date.now(), bids: room.bids, previousBids: room.previousBids, winnerId: room.winnerId, winningBid: room.winningBid, players };
+  return { roomId: room.id, tier: room.tier, fieldSeed: room.fieldSeed, clueSeed: room.fieldSeed, status: room.status, round: room.round, roundEndsAt: room.roundEndsAt, serverNow: Date.now(), bids: room.bids, previousBids: room.previousBids, winnerId: room.winnerId, winningBid: room.winningBid, lotValue: room.lotValue, deficit: room.deficit, redistribution: room.redistribution, players };
 }
 
 function matchmakingStatus(tier, playerId = 0) {
@@ -395,13 +418,17 @@ async function handle(req, res) {
       if (Object.prototype.hasOwnProperty.call(room.bids, String(player.id))) return error(res, 400, 'Вы уже сделали ставку в этом раунде');
       const data = await body(req); const amount = Number(data.amount);
       if (!Number.isInteger(amount) || amount < 0 || amount > Number(player.coins || 0)) return error(res, 400, 'Ставка должна быть целым числом от 0 до доступного баланса');
+      const lotValue = Number(data.lotValue);
+      if (!Number.isInteger(lotValue) || lotValue < 0) return error(res, 400, 'Некорректная стоимость лотов');
+      if (room.lotValue === null) room.lotValue = lotValue;
+      if (room.lotValue !== lotValue) return error(res, 409, 'Стоимость лотов не совпадает с данными комнаты');
       room.bids[String(player.id)] = amount;
       const otherBids = Object.entries(room.bids).filter(([id]) => Number(id) !== player.id).map(([, bid]) => Number(bid));
       const highestOther = otherBids.length ? Math.max(...otherBids) : 0;
       const protection = [2.0, 1.5, 1.3, 1.1, 1.0][Math.max(0, Math.min(4, room.round - 1))];
       if (amount > 0 && highestOther > 0 && amount > Math.ceil(highestOther * protection)) {
         room.previousBids = { ...room.bids }; room.winnerId = player.id; room.winningBid = amount; room.status = 'finished';
-        player.coins = Math.max(0, Number(player.coins || 0) - amount); room.settled = true;
+        settleAuctionRoom(room);
       }
       saveState();
       return json(res, 200, publicAuctionRoom(room));

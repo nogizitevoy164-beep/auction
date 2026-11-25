@@ -45,6 +45,8 @@ var _revealed_round_bids: Dictionary = {}
 var _round_bids_visible: bool = false
 var _round_finished: bool = false
 var _auction_finished: bool = false
+var _online_deficit: int = 0
+var _online_redistribution: Dictionary = {}
 const ROUND_PROTECTION: Array[float] = [2.0, 1.5, 1.3, 1.1, 1.0]
 
 # ==================== ВЫБОР ИГРОВОГО ПОЛЯ ====================
@@ -1456,6 +1458,8 @@ func _apply_online_room_snapshot(snapshot: Dictionary) -> void:
 	for key: Variant in previous_bids:
 		_revealed_round_bids[int(key)] = int(previous_bids[key])
 	_round_bids_visible = String(snapshot.get("status", "active")) == "finished" or not previous_bids.is_empty()
+	_online_deficit = int(snapshot.get("deficit", 0))
+	_online_redistribution = snapshot.get("redistribution", {})
 	if _online_last_round != _field_round:
 		var previous_local_bid := int(previous_bids.get(str(_server_player_id), 0))
 		_prefill_calc(previous_local_bid)
@@ -1914,9 +1918,20 @@ func _settle_auction() -> void:
 			winner = p.id
 			winning_bid = p.last_bid
 	var difference := total_lot_value - winning_bid
+	var deficit := maxi(0, -difference)
+	var local_compensation := 0
+	if not _online_room_id.is_empty():
+		deficit = _online_deficit
+		local_compensation = int(_online_redistribution.get(str(_server_player_id), 0))
 	var result_word := "ПЛЮС" if difference >= 0 else "МИНУС"
-	_last_auction_summary = "Итоги аукциона\nСтоимость всех лотов: %d монет\nСтавка победителя: %d монет\nРазница: %s%d монет — %s\nПобедитель: %s" % [
-		total_lot_value, winning_bid, "+" if difference >= 0 else "", difference, result_word, _player_name(winner)]
+	var redistribution_text := ""
+	if deficit > 0:
+		if local_compensation > 0:
+			redistribution_text = "\nВам распределено компенсации: %d монет" % local_compensation
+		else:
+			redistribution_text = "\nПереплата %d монет распределена между остальными участниками" % deficit
+	_last_auction_summary = "Итоги аукциона\nСтоимость всех лотов: %d монет\nСтавка победителя: %d монет\nРазница: %s%d монет — %s\nПобедитель: %s%s" % [
+		total_lot_value, winning_bid, "+" if difference >= 0 else "", difference, result_word, _player_name(winner), redistribution_text]
 	if _auction_result_label != null:
 		_auction_result_label.text = _last_auction_summary
 		_auction_result_label.visible = true
@@ -1929,6 +1944,8 @@ func _settle_auction() -> void:
 		return
 	if _online_room_id.is_empty():
 		players[0].gold = maxi(players[0].gold - winning_bid, 0)
+		if deficit > 0:
+			_redistribute_local_deficit(winner, deficit)
 	for item: Dictionary in field_items:
 		var won_item := {
 			"title": String(item.get("title", "Предмет")),
@@ -1946,6 +1963,19 @@ func _settle_auction() -> void:
 	add_log("[Победа] Вы выиграли %d предмет(ов)." % field_items.size())
 	_update_player_labels()
 	_refresh_inventory()
+
+
+func _redistribute_local_deficit(winner_id: int, deficit: int) -> void:
+	var recipients: Array[PlayerDataS] = []
+	for p: PlayerDataS in players:
+		if p.id != winner_id:
+			recipients.append(p)
+	if recipients.is_empty():
+		return
+	var share := deficit / recipients.size()
+	var remainder := deficit % recipients.size()
+	for index: int in recipients.size():
+		recipients[index].gold += share + (1 if index < remainder else 0)
 
 
 func _claim_field_item_on_server(item: Dictionary) -> void:
@@ -2303,7 +2333,10 @@ func _on_bid_button_pressed() -> void:
 
 
 func _submit_online_bid(amount: int) -> void:
-	var result: Dictionary = await _server_client.submit_auction_bid(_online_room_id, amount)
+	var lot_value := 0
+	for item: Dictionary in field_items:
+		lot_value += int(item.get("cost", 0))
+	var result: Dictionary = await _server_client.submit_auction_bid(_online_room_id, amount, lot_value)
 	if not result.get("ok", false):
 		var error_data: Dictionary = result.get("data", {})
 		add_log("[Игра] Ставка не принята: %s" % String(error_data.get("error", "сервер отклонил запрос")))

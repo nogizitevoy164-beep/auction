@@ -1,8 +1,8 @@
 {
-  "version": "0.2.9",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.9.zip",
-  "sha256": "d8a2a4da0e116f394b679886052a02a50f36100153f68d591893ef70b018b355",
+  "version": "0.2.10",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.10.zip",
+  "sha256": "eb4fc0f0cfb67fffd0a018ea7ff9289b8aaa78cb60bae64354fd34eea4f67a77",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Исправлена загрузка интерфейса после добавления публичных подсказок раунда."
+  "releaseNotes": "Переплата победителя равномерно распределяется между остальными участниками аукциона."
 }

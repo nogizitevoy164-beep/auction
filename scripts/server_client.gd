@@ -207,9 +207,9 @@ func get_auction_room(room_id: String) -> Dictionary:
 	return await _request_json("/api/v1/auction/rooms/%s" % room_id)
 
 
-func submit_auction_bid(room_id: String, amount: int) -> Dictionary:
+func submit_auction_bid(room_id: String, amount: int, lot_value: int = 0) -> Dictionary:
 	return await _request_json("/api/v1/auction/rooms/%s/bid" % room_id,
-		HTTPClient.METHOD_POST, {"amount": amount})
+		HTTPClient.METHOD_POST, {"amount": amount, "lotValue": lot_value})
 
 
 func _request_json(path: String, method: HTTPClient.Method = HTTPClient.METHOD_GET,
