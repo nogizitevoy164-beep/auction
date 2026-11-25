@@ -1,8 +1,8 @@
 {
-  "version": "0.2.12",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.12.zip",
-  "sha256": "40393906d02de593a00ddc23c1702d938ae7c3f435e6bf9324d9ef8c5b6114d4",
+  "version": "0.2.13",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.13.zip",
+  "sha256": "5178fa2123e284a6642b47cd5bdfc2ec588db31397883fc9b596f28d80011c6b",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Исправлено отображение выбора игрового поля при повторном нажатии вкладки «Аукцион»."
+  "releaseNotes": "Одинаковые обычные предметы и ингредиенты складываются в пачки; добавлены иллюстрации предметов."
 }

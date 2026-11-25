@@ -257,6 +257,7 @@ const GEAR_CLASSES: Dictionary = {
 		"size": Vector2i(1, 2),
 		"abilities": [],
 		"base_cost": 2500,
+		"icon_path": "res://icons/generated/weapon_dagger_assassin.png",
 	},
 	"weapon_sword_warrior": {
 		"title": "Меч воина",
@@ -264,6 +265,7 @@ const GEAR_CLASSES: Dictionary = {
 		"size": Vector2i(1, 4),
 		"abilities": [],
 		"base_cost": 3000,
+		"icon_path": "res://icons/generated/weapon_sword_warrior.png",
 	},
 	"weapon_staff_mage": {
 		"title": "Посох мага",
@@ -271,6 +273,7 @@ const GEAR_CLASSES: Dictionary = {
 		"size": Vector2i(1, 4),
 		"abilities": [],
 		"base_cost": 3200,
+		"icon_path": "res://icons/generated/weapon_staff_mage.png",
 	},
 }
 

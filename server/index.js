@@ -69,6 +69,28 @@ function json(res, status, body) {
 function error(res, status, message) { json(res, status, { error: message }); }
 function id() { return crypto.randomUUID(); }
 
+function isStackableItem(item) {
+  const type = String(item?.type || '').toLowerCase();
+  return !['equipment', 'weapon', 'potion'].includes(type) && !item?.gearClassId && !item?.gear_class_id;
+}
+
+function stackKey(item) {
+  return [String(item.definitionId || item.name || item.title || ''), String(item.name || item.title || ''), String(item.type || ''), Number(item.quality || item.rarity || 1), Number(item.baseCost ?? item.cost ?? 0), String(item.description || '')].join('|');
+}
+
+function itemQuantity(item) { return Math.max(1, Number(item?.quantity) || 1); }
+
+function addInventoryItem(player, item, quantity = 1) {
+  const amount = Math.max(1, Number(quantity) || 1);
+  if (isStackableItem(item)) {
+    const existing = (player.inventory || []).find((candidate) => isStackableItem(candidate) && stackKey(candidate) === stackKey(item));
+    if (existing) { existing.quantity = itemQuantity(existing) + amount; return existing; }
+  }
+  item.quantity = isStackableItem(item) ? amount : 1;
+  player.inventory.push(item);
+  return item;
+}
+
 async function body(req) {
   let text = '';
   for await (const chunk of req) text += chunk;
@@ -456,9 +478,11 @@ async function handle(req, res) {
       const maxQuality = Number(definition.potionQualityByLevel[Math.max(0, Math.min(4, level - 1))] || level);
       const ingredientIndex = (player.inventory || []).findIndex((item) => item.state === 'inventory' && item.type === 'ingredient' && Number(item.quality || 1) <= maxQuality);
       if (ingredientIndex < 0) return error(res, 400, `Нужен ингредиент качества не выше ${maxQuality}`);
-      const ingredient = player.inventory.splice(ingredientIndex, 1)[0];
+      const ingredient = player.inventory[ingredientIndex];
+      if (itemQuantity(ingredient) > 1) ingredient.quantity = itemQuantity(ingredient) - 1;
+      else player.inventory.splice(ingredientIndex, 1);
       const potion = { id: id(), recipeId: 'reveal_item', name: 'Зелье откровения', quality: Math.min(Number(ingredient.quality || 1), maxQuality), baseCost: 250 * Math.min(Number(ingredient.quality || 1), maxQuality), type: 'potion', effect: 'Открывает информацию об одном предмете на поле', state: 'inventory', createdAt: new Date().toISOString() };
-      player.potions.push(potion); player.inventory.push(potion); saveState(); return json(res, 201, { potion, player: publicPlayer(player) });
+      player.potions.push(potion); addInventoryItem(player, potion); saveState(); return json(res, 201, { potion, player: publicPlayer(player) });
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/potions/use') {
       const data = await body(req); const index = (player.inventory || []).findIndex((item) => item.id === data.instanceId && item.type === 'potion' && item.state === 'inventory');
@@ -469,7 +493,7 @@ async function handle(req, res) {
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/sell') {
       const data = await body(req); const index = player.inventory.findIndex((x) => x.id === data.instanceId && x.state === 'inventory');
       if (index < 0) return error(res, 404, 'Предмет не найден в инвентаре');
-      const item = player.inventory[index]; const price = Math.max(0, Math.round(Number(item.baseCost ?? item.cost ?? 0)));
+      const item = player.inventory[index]; const price = Math.max(0, Math.round(Number(item.baseCost ?? item.cost ?? 0))) * itemQuantity(item);
       player.inventory.splice(index, 1); player.coins += price; saveState();
       return json(res, 200, { price, player: publicPlayer(player) });
     }
@@ -479,7 +503,7 @@ async function handle(req, res) {
         const itemType = String(item.type || '').toLowerCase();
         const isSimple = item.state === 'inventory' && !['equipment', 'weapon', 'potion', 'ingredient'].includes(itemType) && !item.gearClassId && !item.gear_class_id;
         if (!isSimple) return true;
-        soldCount += 1; total += Math.max(0, Math.round(Number(item.baseCost ?? item.cost ?? 0))); return false;
+        const quantity = itemQuantity(item); soldCount += quantity; total += Math.max(0, Math.round(Number(item.baseCost ?? item.cost ?? 0))) * quantity; return false;
       });
       player.coins += total; saveState(); return json(res, 200, { soldCount, total, player: publicPlayer(player) });
     }
@@ -495,7 +519,7 @@ async function handle(req, res) {
       const data = await body(req); const definition = state.itemDefinitions.find((x) => x.id === data.definitionId);
       if (!definition) return error(res, 404, 'Описание предмета не найдено');
       const instance = { id: id(), definitionId: definition.id, name: definition.name, baseCost: definition.baseCost, quality: Number(data.quality || definition.rarity), state: 'inventory' };
-      player.inventory.push(instance); saveState(); return json(res, 201, instance);
+      addInventoryItem(player, instance); saveState(); return json(res, 201, instance);
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/claim-field-item') {
       const data = await body(req);
@@ -515,7 +539,7 @@ async function handle(req, res) {
         description: String(data.description || ''),
         state: 'inventory'
       };
-      player.inventory.push(instance); saveState();
+      addInventoryItem(player, instance); saveState();
       return json(res, 201, { instance, player: publicPlayer(player) });
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/market/listings') {

@@ -193,6 +193,7 @@ func _apply_server_profile(profile: Dictionary) -> void:
 		if server_item is Dictionary:
 			var item := {
 				"id": String(server_item.get("id", "")),
+				"definitionId": String(server_item.get("definitionId", server_item.get("definition_id", ""))),
 				"title": String(server_item.get("name", server_item.get("title", "Предмет"))),
 				"cost": int(server_item.get("baseCost", server_item.get("cost", 0))),
 				"quality": int(server_item.get("quality", 1)),
@@ -201,6 +202,7 @@ func _apply_server_profile(profile: Dictionary) -> void:
 				"weaponKind": String(server_item.get("weaponKind", "")),
 				"description": String(server_item.get("description", "")),
 				"state": String(server_item.get("state", "inventory")),
+				"quantity": maxi(1, int(server_item.get("quantity", 1))),
 			}
 			if item["state"] == "equipped":
 				var server_slot := String(server_item.get("slot", ""))
@@ -209,7 +211,7 @@ func _apply_server_profile(profile: Dictionary) -> void:
 				if not server_slot.is_empty():
 					_equipped_items[server_slot] = item
 			elif item["state"] == "inventory":
-				inventory.append(item)
+				_add_inventory_item(item)
 	SaveDataS.save_game(players[0].gold, inventory)
 	_update_player_labels()
 	_refresh_tier_buttons()
@@ -930,6 +932,14 @@ func _catalog_icon(item: Dictionary) -> TextureRect:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	var icon_value := String(item.get("icon", item.get("iconPath", "")))
+	if icon_value.is_empty():
+		icon_value = _field_icon_path({
+			"definition_id": String(item.get("baseId", item.get("id", ""))),
+			"gear_class_id": String(item.get("baseId", item.get("gear_class_id", ""))),
+			"type": String(item.get("type", "")),
+			"title": String(item.get("title", item.get("name", ""))),
+			"quality": int(item.get("quality", item.get("rarity", 1))),
+		})
 	if icon_value.begins_with("res://"):
 		icon.texture = load(icon_value)
 	elif icon_value.begins_with("data:image/"):
@@ -1054,6 +1064,36 @@ func _submit_registration(login_input: LineEdit, email_input: LineEdit, display_
 	add_log("[Аккаунт] Регистрация завершена. Роль выбирается перед входом на поле.")
 
 
+func _is_stackable_inventory_item(item: Dictionary) -> bool:
+	var item_type := String(item.get("type", "")).to_lower()
+	return item_type not in ["equipment", "weapon", "potion"] and String(item.get("gear_class_id", item.get("gearClassId", ""))).is_empty()
+
+
+func _inventory_stack_key(item: Dictionary) -> String:
+	return "%s|%s|%s|%d|%d|%s" % [
+		String(item.get("definitionId", item.get("title", item.get("name", "")))),
+		String(item.get("title", item.get("name", ""))), String(item.get("type", "")),
+		int(item.get("quality", item.get("rarity", 1))), int(item.get("cost", item.get("baseCost", 0))),
+		String(item.get("description", ""))]
+
+
+func _add_inventory_item(item: Dictionary, amount: int = 1) -> Dictionary:
+	var quantity := maxi(1, int(item.get("quantity", amount)))
+	if _is_stackable_inventory_item(item):
+		var key := _inventory_stack_key(item)
+		for existing: Dictionary in inventory:
+			if _is_stackable_inventory_item(existing) and _inventory_stack_key(existing) == key:
+				existing["quantity"] = maxi(1, int(existing.get("quantity", 1))) + quantity
+				return existing
+	item["quantity"] = quantity
+	inventory.append(item)
+	return item
+
+
+func _item_sell_total(item: Dictionary) -> int:
+	return SaveDataS.sell_price(item) * maxi(1, int(item.get("quantity", 1)))
+
+
 func _refresh_inventory() -> void:
 	if _inventory_list == null:
 		return
@@ -1073,7 +1113,8 @@ func _refresh_inventory() -> void:
 		row.add_theme_constant_override("separation", 2)
 		var label := Label.new()
 		var is_gear := _is_equipment_item(item)
-		label.text = "%s — %d%s" % [item.get("title", "Предмет"), int(item.get("cost", item.get("baseCost", 0))), " (снаряжение)" if is_gear else ""]
+		var quantity := maxi(1, int(item.get("quantity", 1)))
+		label.text = "%s%s — %d%s" % [item.get("title", "Предмет"), " ×%d" % quantity if quantity > 1 else "", int(item.get("cost", item.get("baseCost", 0))), " (снаряжение)" if is_gear else ""]
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(label)
@@ -1094,7 +1135,7 @@ func _refresh_inventory() -> void:
 			use_potion.pressed.connect(_use_potion_inventory_item.bind(index))
 			actions.add_child(use_potion)
 		var sell := Button.new()
-		sell.text = "Продать %d" % SaveDataS.sell_price(item)
+		sell.text = "Продать %d" % _item_sell_total(item)
 		sell.pressed.connect(_sell_inventory_item.bind(index))
 		actions.add_child(sell)
 		if _server_connected and _is_market_item(item) and not String(item.get("id", "")).is_empty():
@@ -1161,7 +1202,7 @@ func _sell_inventory_item(index: int) -> void:
 	if _server_connected and not String(item.get("id", "")).is_empty():
 		_sell_inventory_item_on_server(index, String(item["id"]))
 		return
-	var price := SaveDataS.sell_price(item)
+	var price := _item_sell_total(item)
 	players[0].gold += price
 	inventory.remove_at(index)
 	SaveDataS.save_game(players[0].gold, inventory)
@@ -1712,7 +1753,9 @@ func _place_tier_items(count: int, field_seed: int = -1) -> void:
 			if roll <= 0.0:
 				chosen = candidate
 				break
-		picked.append(chosen["item"])
+		var picked_item: Dictionary = chosen["item"].duplicate(true)
+		picked_item["definition_id"] = String(chosen["id"])
+		picked.append(picked_item)
 		pool.erase(chosen)
 	# Раскладка «полками».
 	var col: int = 0
@@ -1733,6 +1776,7 @@ func _place_tier_items(count: int, field_seed: int = -1) -> void:
 			"quality": int(info.get("quality", 1)),
 			"type": String(info.get("type", "sellable")),
 			"gear_class_id": String(info.get("gear_class_id", "")),
+			"definition_id": String(info.get("definition_id", "")),
 			"size": item_size,
 			"description": String(info.get("description", "")),
 			"color": GameData.QUALITY_COLORS[info["quality"]],
@@ -1757,6 +1801,7 @@ func _make_field_gear_item(gear_id: String, quality: int) -> Dictionary:
 		"quality": quality,
 		"type": "equipment",
 		"gear_class_id": gear_id,
+		"definition_id": gear_id,
 		"size": Vector2i(info["size"]),
 		"description": equip.ability_description(),
 	}
@@ -1777,7 +1822,57 @@ func _make_field_ingredient_item(info: Dictionary) -> Dictionary:
 func _field_icon_path(item: Dictionary) -> String:
 	var title := String(item.get("title", ""))
 	var gear_id := String(item.get("gear_class_id", ""))
+	var definition_id := String(item.get("definition_id", ""))
 	var item_type := String(item.get("type", ""))
+	var icon_by_id := {
+		"copper_coin": "res://icons/generated/copper_coin.png",
+		"clay_mug": "res://icons/generated/clay_mug.png",
+		"leather_pouch": "res://icons/generated/leather_pouch.png",
+		"iron_candlestick": "res://icons/generated/iron_candlestick.png",
+		"bone_hunting_horn": "res://icons/generated/bone_hunting_horn.png",
+		"travel_kettle": "res://icons/generated/travel_kettle.png",
+		"militia_wooden_shield": "res://icons/generated/militia_wooden_shield.png",
+		"amber_silver_brooch": "res://icons/generated/amber_silver_brooch.png",
+		"forest_elixir_vial": "res://icons/generated/forest_elixir_vial.png",
+		"guild_scroll": "res://icons/generated/guild_scroll.png",
+		"ranger_dagger": "res://icons/generated/ranger_dagger.png",
+		"sailor_spyglass": "res://icons/generated/sailor_spyglass.png",
+		"merchant_casket": "res://icons/generated/merchant_casket.png",
+		"city_watch_crossbow": "res://icons/generated/city_watch_crossbow.png",
+		"royal_counselor_ring": "res://icons/generated/royal_counselor_ring.png",
+		"star_astrolabe": "res://icons/generated/star_astrolabe.png",
+		"rune_north_axe": "res://icons/generated/rune_north_axe.png",
+		"crystal_chalice": "res://icons/generated/crystal_chalice.png",
+		"ancient_chronicle": "res://icons/generated/ancient_chronicle.png",
+		"knight_visor_helm": "res://icons/generated/knight_visor_helm.png",
+		"baron_war_banner": "res://icons/generated/baron_war_banner.png",
+		"fire_salamander_amulet": "res://icons/generated/fire_salamander_amulet.png",
+		"eternity_hourglass": "res://icons/generated/eternity_hourglass.png",
+		"archdruid_staff": "res://icons/generated/archdruid_staff.png",
+		"true_form_mirror": "res://icons/generated/true_form_mirror.png",
+		"alchemical_cube": "res://icons/generated/alchemical_cube.png",
+		"mithril_plate_cuirass": "res://icons/generated/mithril_plate_cuirass.png",
+		"first_dragon_teardrop": "res://icons/generated/first_dragon_teardrop.png",
+		"sun_dynasty_scepter": "res://icons/generated/sun_dynasty_scepter.png",
+		"forgotten_king_crown": "res://icons/generated/forgotten_king_crown.png",
+		"paladin_light_greatsword": "res://icons/generated/paladin_light_greatsword.png",
+		"secret_magic_grimoire": "res://icons/generated/secret_magic_grimoire.png",
+		"ancient_empire_ark": "res://icons/generated/ancient_empire_ark.png",
+		"alchemy_ingredient_common": "res://icons/generated/alchemy_ingredient_common_herb.png",
+		"alchemy_ingredient_uncommon": "res://icons/generated/alchemy_ingredient_uncommon_root.png",
+		"alchemy_ingredient_rare": "res://icons/generated/alchemy_ingredient_rare_crystal.png",
+		"alchemy_ingredient_epic": "res://icons/generated/alchemy_ingredient_epic_mandrake.png",
+		"alchemy_ingredient_legendary": "res://icons/generated/alchemy_ingredient_legendary.png",
+		"weapon_dagger_assassin": "res://icons/generated/weapon_dagger_assassin.png",
+		"weapon_sword_warrior": "res://icons/generated/weapon_sword_warrior.png",
+		"weapon_staff_mage": "res://icons/generated/weapon_staff_mage.png",
+	}
+	if icon_by_id.has(definition_id):
+		return String(icon_by_id[definition_id])
+	if GameData.GEAR_CLASSES.has(gear_id):
+		var gear_icon := String(GameData.GEAR_CLASSES[gear_id].get("icon_path", ""))
+		if not gear_icon.is_empty():
+			return gear_icon
 	if title == "Медная монета с гербом":
 		return "res://icons/generated/copper_coin.png"
 	if gear_id == "weapon_dagger_assassin" or title.contains("Кинжал ассасина"):
@@ -1954,6 +2049,7 @@ func _settle_auction() -> void:
 			_redistribute_local_deficit(winner, deficit)
 	for item: Dictionary in field_items:
 		var won_item := {
+			"definitionId": String(item.get("definition_id", item.get("gear_class_id", item.get("title", "Предмет")))),
 			"title": String(item.get("title", "Предмет")),
 			"cost": int(item.get("cost", 0)),
 			"size": "%dx%d" % [int(item.get("w", 1)), int(item.get("h", 1))],
@@ -1962,7 +2058,7 @@ func _settle_auction() -> void:
 			"gear_class_id": String(item.get("gear_class_id", "")),
 			"description": String(item.get("description", "")),
 		}
-		inventory.append(won_item)
+		_add_inventory_item(won_item)
 		if _server_connected:
 			_claim_field_item_on_server(item)
 	SaveDataS.save_game(players[0].gold, inventory)
@@ -1993,6 +2089,7 @@ func _claim_field_item_on_server(item: Dictionary) -> void:
 		size_y = size_value.y
 	var result: Dictionary = await _server_client.claim_field_item({
 		"title": String(item.get("title", "Предмет")),
+		"definitionId": String(item.get("definition_id", item.get("gear_class_id", item.get("title", "Предмет")))),
 		"cost": int(item.get("cost", 0)),
 		"quality": int(item.get("quality", 1)),
 		"type": String(item.get("type", "sellable")),
@@ -2037,7 +2134,7 @@ func _sell_all_simple_after_win() -> void:
 			var item: Dictionary = inventory[index]
 			if _is_equipment_item(item) or String(item.get("type", "")) in ["potion", "ingredient", "weapon"]:
 				continue
-			total += maxi(0, int(round(float(item.get("cost", item.get("baseCost", 0))))))
+			total += _item_sell_total(item)
 			inventory.remove_at(index)
 			sold_count += 1
 		players[0].gold += total
@@ -2096,7 +2193,7 @@ func _setup_players() -> void:
 	inventory.clear()
 	for saved_item: Variant in _save_state.get("inventory", []):
 		if saved_item is Dictionary:
-			inventory.append(saved_item.duplicate(true))
+			_add_inventory_item(saved_item.duplicate(true))
 	human.avatar_path = "res://icons/player_1.svg"
 	players.append(human)
 	var bot_gold: Array[int] = [900, 1100, 1000]
