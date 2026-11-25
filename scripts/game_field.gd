@@ -165,18 +165,48 @@ func _draw() -> void:
 			else:
 				draw_rect(rect, FOG_COLOR, true)
 
-	# 2) Подписи полностью раскрытых предметов.
+	# 2) Предметы: до полного раскрытия видны только контур, размер,
+	# цвет качества и тип. Картинка и подробности появляются только после
+	# открытия всех клеток предмета.
 	var font := ThemeDB.fallback_font
 	for i in items.size():
-		if is_item_fully_revealed(i):
-			var item: Dictionary = items[i]
-			var rect := Rect2(
-					int(item.col) * _cell, int(item.row) * _cell,
-					int(item.w) * _cell, int(item.h) * _cell)
-			var font_size := maxi(10, int(_cell * 0.9))
-			var baseline := rect.position.y + rect.size.y * 0.5 + font_size * 0.35
-			draw_string(font, Vector2(rect.position.x, baseline), String(item.title),
-					HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size, Color.WHITE)
+		var item: Dictionary = items[i]
+		var rect := Rect2(
+				int(item.get("col", 0)) * _cell, int(item.get("row", 0)) * _cell,
+				int(item.get("w", 1)) * _cell, int(item.get("h", 1)) * _cell)
+		var quality_color: Color = item.get("color", Color(0.60, 0.60, 0.70))
+		var revealed_item := is_item_fully_revealed(i)
+		# Лёгкая заливка и яркий контур сохраняют силуэт предмета даже в тумане.
+		draw_rect(rect.grow(-2.0), Color(quality_color.r, quality_color.g, quality_color.b, 0.18), true)
+		draw_rect(rect.grow(-2.0), quality_color, false, 3.0)
+		var type_text := _item_type_label(String(item.get("type", "item")))
+		var size_text := "%d×%d" % [int(item.get("w", 1)), int(item.get("h", 1))]
+		var small_size := maxi(9, int(_cell * 0.28))
+		draw_string(font, rect.position + Vector2(4.0, small_size + 3.0), type_text,
+				HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 8.0, small_size, Color.WHITE)
+		draw_string(font, Vector2(rect.position.x, rect.end.y - 5.0), size_text,
+				HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, small_size, quality_color.lightened(0.25))
+		if not revealed_item:
+			continue
+		var icon_path := String(item.get("icon", ""))
+		if not icon_path.is_empty():
+			var icon := load(icon_path) as Texture2D
+			if icon != null:
+				draw_texture_rect(icon, rect.grow(-5.0), false, Color(1, 1, 1, 0.92))
+		var title_size := maxi(9, int(_cell * 0.34))
+		var title_baseline := rect.position.y + rect.size.y * 0.5 + title_size * 0.35
+		draw_string(font, Vector2(rect.position.x + 3.0, title_baseline), String(item.get("title", "")),
+				HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 6.0, title_size, Color.WHITE)
+
+
+func _item_type_label(item_type: String) -> String:
+	match item_type:
+		"equipment": return "Снаряжение"
+		"weapon": return "Оружие"
+		"ingredient": return "Ингредиент"
+		"potion": return "Зелье"
+		"sellable": return "Предмет"
+		_: return item_type.capitalize()
 
 	# 3) Сетка поверх.
 	for c in FIELD_COLS + 1:

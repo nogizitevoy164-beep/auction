@@ -1,8 +1,8 @@
 {
-  "version": "0.2.6",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.6.zip",
-  "sha256": "d77b3f789361bb6eab8fde48f91ab0cb244e6d2d3f6d80dd61bd6ebec7087588",
+  "version": "0.2.7",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.7.zip",
+  "sha256": "9dfe8f89b9ed1ae2172ebd9a31a811715d6a49f9942f79f65534619a6a7fbca7",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Синхронизация онлайн-аукционов и исправления ставок."
+  "releaseNotes": "Изображения предметов появляются после полного раскрытия; скрытые предметы показывают только тип, размер и качество."
 }

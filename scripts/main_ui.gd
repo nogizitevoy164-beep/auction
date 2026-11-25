@@ -1637,6 +1637,7 @@ func _place_tier_items(count: int, field_seed: int = -1) -> void:
 			"size": item_size,
 			"description": String(info.get("description", "")),
 			"color": GameData.QUALITY_COLORS[info["quality"]],
+			"icon": _field_icon_path(info),
 		})
 		col += item_size.x + 1
 		shelf_h = maxi(shelf_h, item_size.y)
@@ -1670,6 +1671,22 @@ func _make_field_ingredient_item(info: Dictionary) -> Dictionary:
 		"size": Vector2i(1, 1),
 		"description": "Ингредиент для Башни алхимии.",
 	}
+
+
+## Картинки для предметов поля. До полного раскрытия GameField их не рисует.
+func _field_icon_path(item: Dictionary) -> String:
+	var title := String(item.get("title", ""))
+	var gear_id := String(item.get("gear_class_id", ""))
+	var item_type := String(item.get("type", ""))
+	if title == "Медная монета с гербом":
+		return "res://icons/generated/copper_coin.png"
+	if gear_id == "weapon_dagger_assassin" or title.contains("Кинжал ассасина"):
+		return "res://icons/generated/weapon_dagger_assassin.png"
+	if item_type == "ingredient" and int(item.get("quality", 1)) == GameData.Quality.LEGENDARY:
+		return "res://icons/generated/alchemy_ingredient_legendary.png"
+	if item_type == "potion" or title == "Зелье откровения":
+		return "res://icons/generated/potion_revelation.png"
+	return ""
 
 
 func _gear_field_weight(gear_id: String, quality: int) -> float:
