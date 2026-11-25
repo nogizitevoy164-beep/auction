@@ -51,10 +51,10 @@ const weapons = [
 ];
 
 const gear = [
-  ['hood_assassin', 'Капюшон ассасина', '2x2', 3000, 'hood_assassin.svg'], ['helm_warrior', 'Шлем воина', '2x2', 3000, 'helm_warrior.svg'], ['hat_mage', 'Шляпа мага', '2x2', 3000, 'hat_mage.svg'],
-  ['cloak_stealth', 'Плащ скрытности', '2x3', 5000, 'cloak_stealth.svg'], ['chest_defense', 'Нагрудник защиты', '3x3', 8000, 'chest_defense.svg'], ['robe_magic', 'Роба волшебства', '2x4', 6000, 'robe_magic.svg'],
-  ['gloves_assassin', 'Перчатки ассасина', '2x1', 2000, 'gloves_assassin.svg'], ['mittens_warrior', 'Руковицы воина', '2x2', 2000, 'mittens_warrior.svg'], ['gloves_mage', 'Перчатки мага', '2x1', 2000, 'gloves_mage.svg'],
-  ['boots_assassin', 'Сапоги ассасина', '2x2', 2000, 'boots_assassin.svg'], ['boots_plate', 'Латные сапоги', '2x2', 2000, 'boots_plate.svg'], ['boots_wizard', 'Сапоги волшебника', '2x2', 2000, 'boots_wizard.svg']
+  ['hood_assassin', 'Капюшон ассасина', '2x2', 3000, 'hood_assassin.png'], ['helm_warrior', 'Шлем воина', '2x2', 3000, 'helm_warrior.png'], ['hat_mage', 'Шляпа мага', '2x2', 3000, 'hat_mage.png'],
+  ['cloak_stealth', 'Плащ скрытности', '2x3', 5000, 'cloak_stealth.png'], ['chest_defense', 'Нагрудник защиты', '3x3', 8000, 'chest_defense.png'], ['robe_magic', 'Роба волшебства', '2x4', 6000, 'robe_magic.png'],
+  ['gloves_assassin', 'Перчатки ассасина', '2x1', 2000, 'gloves_assassin.png'], ['mittens_warrior', 'Руковицы воина', '2x2', 2000, 'mittens_warrior.png'], ['gloves_mage', 'Перчатки мага', '2x1', 2000, 'gloves_mage.png'],
+  ['boots_assassin', 'Сапоги ассасина', '2x2', 2000, 'boots_assassin.png'], ['boots_plate', 'Латные сапоги', '2x2', 2000, 'boots_plate.png'], ['boots_wizard', 'Сапоги волшебника', '2x2', 2000, 'boots_wizard.png']
 ];
 
 function sizeOf(value) { const [x, y] = value.split('x').map(Number); return { sizeX: x, sizeY: y }; }

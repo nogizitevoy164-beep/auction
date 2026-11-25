@@ -57,7 +57,7 @@ if (!Array.isArray(state.itemDefinitions)) state.itemDefinitions = [];
 for (const item of seededCatalog) {
   const existing = state.itemDefinitions.find((candidate) => candidate.id === item.id);
   if (existing) {
-    if (!existing.iconPath) existing.iconPath = item.iconPath;
+    if (item.type === 'equipment' || !existing.iconPath) existing.iconPath = item.iconPath;
     if (!existing.sizeX) existing.sizeX = item.sizeX;
     if (!existing.sizeY) existing.sizeY = item.sizeY;
     if (!existing.chances) existing.chances = item.chances;

@@ -135,7 +135,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.WEAPON,
 		"unlock_target": "Клинок",
 		"base_cost": 3000,
-		"icon_path": "res://icons/hood_assassin.svg",
+		"icon_path": "res://icons/generated/gear_new/hood_assassin.png",
 	},
 	"helm_warrior": {
 		"title": "Шлем воина",
@@ -145,7 +145,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.WEAPON,
 		"unlock_target": "Меч",
 		"base_cost": 3000,
-		"icon_path": "res://icons/helm_warrior.svg",
+		"icon_path": "res://icons/generated/gear_new/helm_warrior.png",
 	},
 	"hat_mage": {
 		"title": "Шляпа мага",
@@ -155,7 +155,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.WEAPON,
 		"unlock_target": "Посох",
 		"base_cost": 3000,
-		"icon_path": "res://icons/hat_mage.svg",
+		"icon_path": "res://icons/generated/gear_new/hat_mage.png",
 	},
 
 	# ---------- БРОНЯ ----------
@@ -166,7 +166,7 @@ const GEAR_CLASSES: Dictionary = {
 		"abilities": [Ability.STEALTH],
 		"has_capacity": true,
 		"base_cost": 5000,
-		"icon_path": "res://icons/cloak_stealth.svg",
+		"icon_path": "res://icons/generated/gear_new/cloak_stealth.png",
 	},
 	"chest_defense": {
 		"title": "Нагрудник защиты",
@@ -175,7 +175,7 @@ const GEAR_CLASSES: Dictionary = {
 		"abilities": [Ability.DEFENSE],
 		"has_capacity": true,
 		"base_cost": 8000,
-		"icon_path": "res://icons/chest_defense.svg",
+		"icon_path": "res://icons/generated/gear_new/chest_defense.png",
 	},
 	"robe_magic": {
 		"title": "Роба волшебства",
@@ -184,7 +184,7 @@ const GEAR_CLASSES: Dictionary = {
 		"abilities": [Ability.CANCEL],
 		"has_capacity": true,
 		"base_cost": 6000,
-		"icon_path": "res://icons/robe_magic.svg",
+		"icon_path": "res://icons/generated/gear_new/robe_magic.png",
 	},
 
 	# ---------- ПЕРЧАТКИ ----------
@@ -196,7 +196,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.INGREDIENT_ASSASSIN,
 		"unlock_target": "Ингредиенты ассасина",
 		"base_cost": 2000,
-		"icon_path": "res://icons/gloves_assassin.svg",
+		"icon_path": "res://icons/generated/gear_new/gloves_assassin.png",
 	},
 	"mittens_warrior": {
 		"title": "Руковицы воина",
@@ -206,7 +206,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.INGREDIENT_WARRIOR,
 		"unlock_target": "Ингредиенты воина",
 		"base_cost": 2000,
-		"icon_path": "res://icons/mittens_warrior.svg",
+		"icon_path": "res://icons/generated/gear_new/mittens_warrior.png",
 	},
 	"gloves_mage": {
 		"title": "Перчатки мага",
@@ -216,7 +216,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.INGREDIENT_MAGE,
 		"unlock_target": "Ингредиенты мага",
 		"base_cost": 2000,
-		"icon_path": "res://icons/gloves_mage.svg",
+		"icon_path": "res://icons/generated/gear_new/gloves_mage.png",
 	},
 
 	# ---------- ОБУВЬ (2x2 = 4 клетки, все три класса) ----------
@@ -228,7 +228,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.INGREDIENT_CONSUMABLE,
 		"unlock_target": "Ингредиенты расходных материалов",
 		"base_cost": 2000,
-		"icon_path": "res://icons/boots_assassin.svg",
+		"icon_path": "res://icons/generated/gear_new/boots_assassin.png",
 	},
 	"boots_plate": {
 		"title": "Латные сапоги",
@@ -238,7 +238,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.INGREDIENT_CONSUMABLE,
 		"unlock_target": "Ингредиенты расходных материалов",
 		"base_cost": 2000,
-		"icon_path": "res://icons/boots_plate.svg",
+		"icon_path": "res://icons/generated/gear_new/boots_plate.png",
 	},
 	"boots_wizard": {
 		"title": "Сапоги волшебника",
@@ -248,7 +248,7 @@ const GEAR_CLASSES: Dictionary = {
 		"unlock_branch": ItemType.INGREDIENT_CONSUMABLE,
 		"unlock_target": "Ингредиенты расходных материалов",
 		"base_cost": 2000,
-		"icon_path": "res://icons/boots_wizard.svg",
+		"icon_path": "res://icons/generated/gear_new/boots_wizard.png",
 	},
 	# ---------- ОРУЖИЕ ----------
 	"weapon_dagger_assassin": {

@@ -1,8 +1,8 @@
 {
-  "version": "0.2.13",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.13.zip",
-  "sha256": "5178fa2123e284a6642b47cd5bdfc2ec588db31397883fc9b596f28d80011c6b",
+  "version": "0.2.14",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.14.zip",
+  "sha256": "F394F00137DE9E755BB6437170757A74339EFE8B2860B2BDEDD50A9901E161C3",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Одинаковые обычные предметы и ингредиенты складываются в пачки; добавлены иллюстрации предметов."
+  "releaseNotes": "Добавлены новые изображения экипировки; цвет рамки и свечения зависит от качества предмета."
 }
