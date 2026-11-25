@@ -1922,6 +1922,27 @@ func _setup_calc() -> void:
 		if child is Button:
 			child.pressed.connect(_on_calc_button_pressed.bind(child.text))
 	bid_button.pressed.connect(_on_bid_button_pressed)
+	calc_display.gui_input.connect(_on_calc_display_gui_input)
+	calc_display.text_changed.connect(_on_calc_display_text_changed)
+
+
+func _on_calc_display_gui_input(event: InputEvent) -> void:
+	if not _calc_prefilled or not event is InputEventKey:
+		return
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	var printable := key_event.unicode > 0 or key_event.keycode in [KEY_BACKSPACE, KEY_DELETE, KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_4, KEY_KP_5, KEY_KP_6, KEY_KP_7, KEY_KP_8, KEY_KP_9]
+	var paste := key_event.keycode == KEY_V and key_event.ctrl_pressed
+	if printable or paste:
+		_calc_prefilled = false
+		calc_expression = ""
+		calc_display.text = ""
+
+
+func _on_calc_display_text_changed(new_text: String) -> void:
+	if not _calc_prefilled:
+		calc_expression = new_text
 
 
 func _on_calc_button_pressed(symbol: String) -> void:
