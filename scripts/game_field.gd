@@ -25,6 +25,13 @@ const FOG_COLOR: Color = Color(0.16, 0.15, 0.23, 1.0)      # закрытая к
 const FOG_MARK_COLOR: Color = Color(0.5, 0.47, 0.68, 0.55) # знак «?»
 const EMPTY_REVEALED_COLOR: Color = Color(0.20, 0.20, 0.26, 1.0) # открытая пустая
 const GRID_LINE_COLOR: Color = Color(0.25, 0.25, 0.32, 1.0)
+const FIELD_BACK_COLOR: Color = Color(0.035, 0.04, 0.075, 1.0)
+const TILE_PALETTE: Array[Color] = [
+	Color(0.24, 0.18, 0.48, 1.0), Color(0.29, 0.22, 0.58, 1.0),
+	Color(0.22, 0.26, 0.58, 1.0), Color(0.34, 0.22, 0.60, 1.0),
+]
+const TILE_BORDER: Color = Color(0.58, 0.52, 0.88, 0.9)
+const TILE_HIGHLIGHT: Color = Color(0.86, 0.72, 1.0, 0.3)
 
 ## Текущий раунд аукциона (0 — торгов ещё не было).
 var current_round: int = 0
@@ -152,20 +159,25 @@ func is_item_fully_revealed(index: int) -> bool:
 
 
 func _draw() -> void:
-	# 1) Клетки: открытые (предмет/пусто) или закрытые (туман с «?»).
+	# 1) Декоративная основа поля: квадратные плитки с фиолетово-синим
+	# магическим узором, визуально близким к референсу.
+	draw_rect(Rect2(0.0, 0.0, FIELD_COLS * _cell, _rows * _cell), FIELD_BACK_COLOR, true)
 	for r: int in _rows:
 		for c: int in FIELD_COLS:
 			var key := Vector2i(c, r)
 			var rect := Rect2(c * _cell, r * _cell, _cell, _cell)
-			if revealed.has(key):
-				if _occupancy.has(key):
-					draw_rect(rect, items[_occupancy[key]].color, true)
-				else:
-					draw_rect(rect, EMPTY_REVEALED_COLOR, true)
-			else:
-				draw_rect(rect, FOG_COLOR, true)
+			_draw_magic_tile(rect, c, r, revealed.has(key))
 
-	# 2) Предметы: до полного раскрытия видны только контур, размер,
+	# 2) Места предметов затемняются как крупные области на поле. Размер и
+	# цвет рамки остаются видимыми даже до полного раскрытия.
+	for item: Dictionary in items:
+		var item_rect := Rect2(
+				int(item.get("col", 0)) * _cell, int(item.get("row", 0)) * _cell,
+				int(item.get("w", 1)) * _cell, int(item.get("h", 1)) * _cell)
+		draw_rect(item_rect.grow(-3.0), Color(0.035, 0.055, 0.075, 0.88), true)
+		draw_rect(item_rect.grow(-2.0), Color(0.45, 0.55, 0.72, 0.38), false, 1.0)
+
+	# 3) Предметы: до полного раскрытия видны только контур, размер,
 	# цвет качества и тип. Картинка и подробности появляются только после
 	# открытия всех клеток предмета.
 	var font := ThemeDB.fallback_font
@@ -176,9 +188,13 @@ func _draw() -> void:
 				int(item.get("w", 1)) * _cell, int(item.get("h", 1)) * _cell)
 		var quality_color: Color = item.get("color", Color(0.60, 0.60, 0.70))
 		var revealed_item := is_item_fully_revealed(i)
-		# Лёгкая заливка и яркий контур сохраняют силуэт предмета даже в тумане.
-		draw_rect(rect.grow(-2.0), Color(quality_color.r, quality_color.g, quality_color.b, 0.18), true)
-		draw_rect(rect.grow(-2.0), quality_color, false, 3.0)
+		# Неоновая подсветка качества и толстая рамка как у предметных ячеек
+		# из референса.
+		var glow := quality_color
+		glow.a = 0.28
+		draw_rect(rect.grow(-1.0), glow, false, 7.0)
+		draw_rect(rect.grow(-2.0), Color(quality_color.r, quality_color.g, quality_color.b, 0.16), true)
+		draw_rect(rect.grow(-2.0), quality_color, false, 3.5)
 		var type_text := _item_type_label(String(item.get("type", "item")))
 		var size_text := "%d×%d" % [int(item.get("w", 1)), int(item.get("h", 1))]
 		var small_size := maxi(9, int(_cell * 0.28))
@@ -197,15 +213,15 @@ func _draw() -> void:
 		var title_baseline := rect.position.y + rect.size.y * 0.5 + title_size * 0.35
 		draw_string(font, Vector2(rect.position.x + 3.0, title_baseline), String(item.get("title", "")),
 				HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 6.0, title_size, Color.WHITE)
-	# 3) Сетка поверх.
+	# 4) Сетка поверх.
 	for c in FIELD_COLS + 1:
 		var x := c * _cell
-		draw_line(Vector2(x, 0.0), Vector2(x, _rows * _cell), GRID_LINE_COLOR, 1.0)
+		draw_line(Vector2(x, 0.0), Vector2(x, _rows * _cell), Color(0.08, 0.08, 0.15, 0.7), 1.0)
 	for r in _rows + 1:
 		var y := r * _cell
-		draw_line(Vector2(0.0, y), Vector2(FIELD_COLS * _cell, y), GRID_LINE_COLOR, 1.0)
+		draw_line(Vector2(0.0, y), Vector2(FIELD_COLS * _cell, y), Color(0.08, 0.08, 0.15, 0.7), 1.0)
 
-	# 4) Знаки «?» на закрытых клетках (поверх сетки).
+	# 5) Знаки «?» на закрытых клетках (поверх сетки).
 	if revealed.size() < FIELD_COLS * _rows:
 		var font_size := maxi(9, int(_cell * 0.45))
 		for r: int in _rows:
@@ -215,6 +231,26 @@ func _draw() -> void:
 				var baseline := r * _cell + _cell * 0.5 + font_size * 0.35
 				draw_string(font, Vector2(c * _cell, baseline), "?",
 						HORIZONTAL_ALIGNMENT_CENTER, _cell, font_size, FOG_MARK_COLOR)
+
+
+func _draw_magic_tile(rect: Rect2, col: int, row: int, is_revealed: bool) -> void:
+	var tile := StyleBoxFlat.new()
+	tile.bg_color = TILE_PALETTE[abs(col * 17 + row * 31) % TILE_PALETTE.size()]
+	if not is_revealed:
+		tile.bg_color = tile.bg_color.darkened(0.18)
+	tile.border_color = TILE_BORDER
+	tile.set_border_width_all(1)
+	tile.set_corner_radius_all(maxi(3, int(_cell * 0.08)))
+	draw_style_box(tile, rect.grow(-1.5))
+	var inner := rect.grow(-4.0)
+	var arc_color := TILE_HIGHLIGHT if is_revealed else Color(0.65, 0.58, 0.9, 0.16)
+	var radius := maxf(4.0, _cell * 0.43)
+	draw_arc(inner.get_center() + Vector2(-_cell * 0.28, _cell * 0.28), radius,
+			-2.35, -0.65, 12, arc_color, maxf(1.0, _cell * 0.035), true)
+	if abs(col * 13 + row * 7) % 5 == 0:
+		var star := inner.get_center() + Vector2(_cell * 0.14, -_cell * 0.12)
+		draw_line(star - Vector2(_cell * 0.16, 0.0), star + Vector2(_cell * 0.16, 0.0), arc_color, 1.4)
+		draw_line(star - Vector2(0.0, _cell * 0.16), star + Vector2(0.0, _cell * 0.16), arc_color, 1.4)
 
 
 func _item_type_label(item_type: String) -> String:
