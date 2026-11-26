@@ -63,6 +63,7 @@ var _sell_simple_after_win_button: Button
 var _last_auction_summary: String = ""
 ## Кнопки входа на поля: FieldTier -> Button.
 var _tier_buttons: Dictionary = {}
+var _central_nav_buttons: Dictionary = {}
 
 # ==================== ТАЙМЕР РАУНДА ====================
 const ROUND_TIME: float = 40.0    # длительность одного раунда, секунд
@@ -123,6 +124,7 @@ var _account_form_host: VBoxContainer
 var _active_central_view: String = "auction"
 var _server_client: Node
 var _server_connected: bool = false
+var _server_connecting: bool = false
 var _server_player_id: int = 0
 var _matchmaking_timer: Timer
 var _matchmaking_tier: int = -1
@@ -171,15 +173,8 @@ func _ready() -> void:
 
 
 func _sync_with_server() -> void:
-	var profile = await _server_client.connect_guest()
-	if profile.is_empty():
+	if not await _connect_server_once():
 		add_log("[Сервер] Сервер недоступен — используется локальный режим.")
-		return
-	_server_connected = true
-	_apply_server_profile(profile)
-	_server_client.server_event.connect(_on_server_event)
-	_server_client.start_realtime()
-	add_log("[Сервер] Подключено: %s." % String(profile.get("login", "игрок")))
 
 
 func _apply_server_profile(profile: Dictionary) -> void:
@@ -429,6 +424,7 @@ func _setup_central_navigation() -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(_show_central_view.bind(String(view["id"])))
 		nav_row.add_child(button)
+		_central_nav_buttons[String(view["id"])] = button
 	center_column.add_child(navigation)
 	center_column.move_child(navigation, 0)
 
@@ -484,6 +480,32 @@ func _show_central_view(view_id: String) -> void:
 			_load_catalog_view()
 		elif view_id == "account":
 			_load_account_view()
+
+
+func _set_navigation_locked(locked: bool) -> void:
+	# Во время активного аукциона разрешены только возврат к аукциону
+	# и просмотр каталога. Остальные разделы не должны прерывать матч.
+	for view_id: String in _central_nav_buttons:
+		var button: Button = _central_nav_buttons[view_id]
+		button.disabled = locked and view_id not in ["auction", "catalog"]
+
+
+func _connect_server_once() -> bool:
+	if _server_connected:
+		return true
+	if _server_connecting:
+		return false
+	_server_connecting = true
+	var profile: Dictionary = await _server_client.connect_guest()
+	_server_connecting = false
+	if profile.is_empty():
+		return false
+	_server_connected = true
+	_apply_server_profile(profile)
+	_server_client.server_event.connect(_on_server_event)
+	_server_client.start_realtime()
+	add_log("[Сервер] Подключено: %s." % String(profile.get("login", "игрок")))
+	return true
 
 
 func _replace_central_box() -> VBoxContainer:
@@ -1317,6 +1339,12 @@ func _refresh_tier_buttons() -> void:
 ## Вход на выбранное поле: проверка золота, вход ботов,
 ## раскладка лотов по шансам поля и старт 1-го раунда.
 func _on_tier_selected(tier: int) -> void:
+	# Пользователь мог нажать поле сразу после запуска, пока фоновое
+	# подключение ещё не завершилось. Повторяем подключение здесь, чтобы
+	# вход не переходил молча в локальный режим.
+	if not await _connect_server_once():
+		add_log("[Сервер] Не удалось подключиться. Проверьте интернет и повторите вход.")
+		return
 	var info: Dictionary = GameData.FIELD_TIERS[tier]
 	var min_gold: int = int(info["min_gold"])
 	if players[0].gold < min_gold:
@@ -1324,6 +1352,7 @@ func _on_tier_selected(tier: int) -> void:
 			info["title"], min_gold, players[0].gold])
 		return
 	current_tier = tier
+	_set_navigation_locked(true)
 	_set_role_locked(true)
 	_tier_overlay.visible = false
 	main_hbox.visible = true
@@ -1423,6 +1452,7 @@ func _start_auction_after_matchmaking() -> void:
 		return
 	_matchmaking_active = false
 	_matchmaking_timer.stop()
+	_set_navigation_locked(true)
 	if not _online_room_id.is_empty() and _server_connected:
 		_start_online_auction()
 		return
@@ -1436,6 +1466,7 @@ func _start_auction_after_matchmaking() -> void:
 	_place_tier_items(int(info["lot_count"]))
 	_auction_settled = false
 	_auction_finished = false
+	_set_navigation_locked(true)
 	_revealed_round_bids = {}
 	_round_bids_visible = false
 	set_field_round(1)
@@ -1464,6 +1495,7 @@ func _start_online_auction() -> void:
 	_place_tier_items(int(info["lot_count"]), int(snapshot.get("fieldSeed", 0)))
 	_auction_settled = false
 	_auction_finished = false
+	_set_navigation_locked(true)
 	_online_last_round = -1
 	_apply_online_room_snapshot(snapshot)
 	if not _online_room_id.is_empty():
@@ -2011,6 +2043,7 @@ func _settle_auction() -> void:
 		return
 	_auction_settled = true
 	_auction_finished = true
+	_set_navigation_locked(false)
 	var winner := -1
 	var winning_bid := 0
 	var total_lot_value := 0

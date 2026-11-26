@@ -1,8 +1,8 @@
 {
-  "version": "0.2.16",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.16.zip",
-  "sha256": "1CD0D2826D3812D2A8F4444D2A252D1FFE123442C7A89702D8EC6FC2FCF6F0EB",
+  "version": "0.2.17",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.17.zip",
+  "sha256": "185513E54623F2B2828D8AB813A6B39BAD4CC4573239D87E144179EFFEFBCE51",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Игровое поле оформлено в стиле магической сетки с декоративными плитками и подсветкой качества предметов."
+  "releaseNotes": "Исправлен вход на аукцион через сервер; во время аукциона заблокированы лишние вкладки."
 }
