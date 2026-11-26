@@ -59,6 +59,21 @@ const gear = [
 
 function sizeOf(value) { const [x, y] = value.split('x').map(Number); return { sizeX: x, sizeY: y }; }
 function chances(starter, mid, elite) { return { starter, mid, elite }; }
+function subcategory(name, type, weaponKind = '') {
+  const title = String(name || '').toLowerCase();
+  if (type === 'ingredient') return 'Ингредиент';
+  if (type === 'potion' || title.includes('зель')) return 'Зелье';
+  if (weaponKind === 'dagger' || title.includes('кинжал')) return 'Кинжал';
+  if (weaponKind === 'sword' || title.includes('меч') || title.includes('топор')) return 'Меч';
+  if (weaponKind === 'staff' || title.includes('посох')) return 'Посох';
+  if (title.includes('арбалет') || title.includes('лук')) return 'Арбалет';
+  if (['кольцо', 'брошь', 'амулет', 'корона', 'скипетр', 'слеза', 'астролябия'].some((word) => title.includes(word))) return 'Драгоценность';
+  if (type === 'equipment' || ['шлем', 'капюшон', 'сапог', 'перчат', 'доспех', 'кираса', 'щит', 'роба', 'плащ'].some((word) => title.includes(word))) return 'Доспех';
+  if (['свиток', 'фолиант', 'гримуар', 'летопис'].some((word) => title.includes(word))) return 'Свиток';
+  if (['чаш', 'круж', 'склян', 'ларец', 'котел', 'куб'].some((word) => title.includes(word))) return 'Сосуд';
+  if (title.includes('монет')) return 'Монета';
+  return 'Предмет';
+}
 const ingredientIcons = {
   alchemy_ingredient_common: 'alchemy_ingredient_common_herb.png',
   alchemy_ingredient_uncommon: 'alchemy_ingredient_uncommon_root.png',
@@ -67,10 +82,10 @@ const ingredientIcons = {
   alchemy_ingredient_legendary: 'alchemy_ingredient_legendary.png'
 };
 function buildCatalog() {
-  const result = sellables.map(([id, name, rarity, baseCost, size, starter, mid, elite]) => ({ id, name, description: 'Предмет для продажи.', type: 'sellable', rarity, baseCost, ...sizeOf(size), chances: chances(starter, mid, elite), iconPath: icon(`${id}.png`) }));
-  result.push(...ingredients.map(([id, name, rarity, baseCost, starter, mid, elite]) => ({ id, name, description: 'Ингредиент для создания зелий. Можно складывать в пачки.', type: 'ingredient', rarity, baseCost, sizeX: 1, sizeY: 1, chances: chances(starter, mid, elite), iconPath: icon(ingredientIcons[id]) })));
-  result.push(...weapons.map(([id, name, weaponKind, size, rarity, baseCost, description, image]) => ({ id, name, description, type: 'weapon', weaponKind, rarity, baseCost, ...sizeOf(size), chances: chances(.1, .3, .8), iconPath: icon(image) })));
-  result.push(...gear.flatMap(([id, name, size, baseCost, image]) => Array.from({ length: 5 }, (_, index) => ({ id: `${id}_q${index + 1}`, baseId: id, name: `${name} — качество ${index + 1}`, description: 'Предмет экипировки с активными или пассивными свойствами.', type: 'equipment', gearClassId: id, rarity: index + 1, baseCost: baseCost * (index + 1), ...sizeOf(size), chances: chances(.1, .3, .8), iconPath: icon(image) }))));
+  const result = sellables.map(([id, name, rarity, baseCost, size, starter, mid, elite]) => ({ id, name, description: 'Предмет для продажи.', type: 'sellable', subcategory: subcategory(name, 'sellable'), rarity, baseCost, ...sizeOf(size), chances: chances(starter, mid, elite), iconPath: icon(`${id}.png`) }));
+  result.push(...ingredients.map(([id, name, rarity, baseCost, starter, mid, elite]) => ({ id, name, description: 'Ингредиент для создания зелий. Можно складывать в пачки.', type: 'ingredient', subcategory: 'Ингредиент', rarity, baseCost, sizeX: 1, sizeY: 1, chances: chances(starter, mid, elite), iconPath: icon(ingredientIcons[id]) })));
+  result.push(...weapons.map(([id, name, weaponKind, size, rarity, baseCost, description, image]) => ({ id, name, description, type: 'weapon', weaponKind, subcategory: subcategory(name, 'weapon', weaponKind), rarity, baseCost, ...sizeOf(size), chances: chances(.1, .3, .8), iconPath: icon(image) })));
+  result.push(...gear.flatMap(([id, name, size, baseCost, image]) => Array.from({ length: 5 }, (_, index) => ({ id: `${id}_q${index + 1}`, baseId: id, name: `${name} — качество ${index + 1}`, description: 'Предмет экипировки с активными или пассивными свойствами.', type: 'equipment', subcategory: subcategory(name, 'equipment'), gearClassId: id, rarity: index + 1, baseCost: baseCost * (index + 1), ...sizeOf(size), chances: chances(.1, .3, .8), iconPath: icon(image) }))));
   return result;
 }
 

@@ -158,6 +158,15 @@ func is_item_fully_revealed(index: int) -> bool:
 	return true
 
 
+func is_item_partially_revealed(index: int) -> bool:
+	var item: Dictionary = items[index]
+	for r: int in range(int(item.get("row", 0)), int(item.get("row", 0)) + int(item.get("h", 1))):
+		for c: int in range(int(item.get("col", 0)), int(item.get("col", 0)) + int(item.get("w", 1))):
+			if revealed.has(Vector2i(c, r)):
+				return true
+	return false
+
+
 func _draw() -> void:
 	# 1) Декоративная основа поля: квадратные плитки с фиолетово-синим
 	# магическим узором, визуально близким к референсу.
@@ -188,6 +197,7 @@ func _draw() -> void:
 				int(item.get("w", 1)) * _cell, int(item.get("h", 1)) * _cell)
 		var quality_color: Color = item.get("color", Color(0.60, 0.60, 0.70))
 		var revealed_item := is_item_fully_revealed(i)
+		var partially_revealed := is_item_partially_revealed(i)
 		# Неоновая подсветка качества и толстая рамка как у предметных ячеек
 		# из референса.
 		var glow := quality_color
@@ -195,7 +205,11 @@ func _draw() -> void:
 		draw_rect(rect.grow(-1.0), glow, false, 7.0)
 		draw_rect(rect.grow(-2.0), Color(quality_color.r, quality_color.g, quality_color.b, 0.16), true)
 		draw_rect(rect.grow(-2.0), quality_color, false, 3.5)
-		var type_text := _item_type_label(String(item.get("type", "item")))
+		# До первого раскрытия нет ни категории, ни силуэта: предмет полностью скрыт.
+		if not partially_revealed:
+			continue
+		var subtype := String(item.get("subcategory", "Предмет"))
+		var type_text := "%s · %s" % [_item_type_label(String(item.get("type", "item"))), subtype]
 		var size_text := "%d×%d" % [int(item.get("w", 1)), int(item.get("h", 1))]
 		var small_size := maxi(9, int(_cell * 0.28))
 		draw_string(font, rect.position + Vector2(4.0, small_size + 3.0), type_text,
@@ -203,6 +217,7 @@ func _draw() -> void:
 		draw_string(font, Vector2(rect.position.x, rect.end.y - 5.0), size_text,
 				HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, small_size, quality_color.lightened(0.25))
 		if not revealed_item:
+			_draw_item_silhouette(rect, subtype, quality_color)
 			continue
 		var icon_path := String(item.get("icon", ""))
 		if not icon_path.is_empty():
@@ -213,13 +228,22 @@ func _draw() -> void:
 		var title_baseline := rect.position.y + rect.size.y * 0.5 + title_size * 0.35
 		draw_string(font, Vector2(rect.position.x + 3.0, title_baseline), String(item.get("title", "")),
 				HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 6.0, title_size, Color.WHITE)
+		var cost_text := "◉ %d" % int(item.get("cost", 0))
+		draw_string(font, rect.end - Vector2(7.0, 7.0), cost_text,
+				HORIZONTAL_ALIGNMENT_RIGHT, rect.size.x - 12.0, maxi(10, int(_cell * 0.32)), Color.WHITE)
 	# 4) Сетка поверх.
 	for c in FIELD_COLS + 1:
 		var x := c * _cell
-		draw_line(Vector2(x, 0.0), Vector2(x, _rows * _cell), Color(0.08, 0.08, 0.15, 0.7), 1.0)
+		for r in _rows:
+			if _grid_line_inside_item(c, r, true):
+				continue
+			draw_line(Vector2(x, r * _cell), Vector2(x, (r + 1) * _cell), Color(0.08, 0.08, 0.15, 0.7), 1.0)
 	for r in _rows + 1:
 		var y := r * _cell
-		draw_line(Vector2(0.0, y), Vector2(FIELD_COLS * _cell, y), Color(0.08, 0.08, 0.15, 0.7), 1.0)
+		for c in FIELD_COLS:
+			if _grid_line_inside_item(c, r, false):
+				continue
+			draw_line(Vector2(c * _cell, y), Vector2((c + 1) * _cell, y), Color(0.08, 0.08, 0.15, 0.7), 1.0)
 
 	# 5) Знаки «?» на закрытых клетках (поверх сетки).
 	if revealed.size() < FIELD_COLS * _rows:
@@ -261,6 +285,50 @@ func _item_type_label(item_type: String) -> String:
 		"potion": return "Зелье"
 		"sellable": return "Предмет"
 		_: return item_type.capitalize()
+
+
+func _grid_line_inside_item(line_index: int, segment: int, vertical: bool) -> bool:
+	for item: Dictionary in items:
+		var item_col := int(item.get("col", 0))
+		var item_row := int(item.get("row", 0))
+		var item_w := int(item.get("w", 1))
+		var item_h := int(item.get("h", 1))
+		if vertical:
+			if line_index > item_col and line_index < item_col + item_w and segment >= item_row and segment < item_row + item_h:
+				return true
+		else:
+			if line_index > item_row and line_index < item_row + item_h and segment >= item_col and segment < item_col + item_w:
+				return true
+	return false
+
+
+func _draw_item_silhouette(rect: Rect2, subtype: String, color: Color) -> void:
+	var center := rect.get_center()
+	var scale := minf(rect.size.x, rect.size.y) * 0.28
+	var silhouette := Color(color.r, color.g, color.b, 0.82)
+	var shadow := Color(0.02, 0.03, 0.05, 0.9)
+	match subtype:
+		"Лук":
+			draw_arc(center, scale * 1.55, -1.35, 1.35, 24, silhouette, maxf(2.0, scale * 0.12), true)
+			draw_line(center + Vector2(-scale * 0.95, 0), center + Vector2(scale * 1.2, 0), silhouette, maxf(2.0, scale * 0.1))
+		"Меч", "Кинжал", "Топор", "Арбалет":
+			draw_line(center + Vector2(-scale * 1.25, scale * 1.15), center + Vector2(scale * 1.05, -scale * 1.1), silhouette, maxf(3.0, scale * 0.22))
+			draw_line(center + Vector2(-scale * 1.45, scale * 1.35), center + Vector2(-scale * 0.8, scale * 0.7), shadow, maxf(3.0, scale * 0.25))
+		"Посох":
+			draw_line(center + Vector2(-scale * 0.2, scale * 1.6), center + Vector2(scale * 0.35, -scale * 1.55), silhouette, maxf(3.0, scale * 0.18))
+			draw_circle(center + Vector2(scale * 0.38, -scale * 1.5), scale * 0.36, silhouette)
+		"Драгоценность":
+			var diamond := PackedVector2Array([center + Vector2(0, -scale * 1.5), center + Vector2(scale * 1.1, 0), center + Vector2(0, scale * 1.5), center + Vector2(-scale * 1.1, 0)])
+			draw_colored_polygon(diamond, silhouette)
+		"Доспех":
+			draw_circle(center + Vector2(0, -scale * 0.85), scale * 0.5, silhouette)
+			draw_rect(Rect2(center + Vector2(-scale * 0.9, -scale * 0.2), Vector2(scale * 1.8, scale * 1.8)), silhouette, true)
+		"Зелье":
+			draw_circle(center + Vector2(0, scale * 0.35), scale * 0.95, silhouette)
+			draw_rect(Rect2(center + Vector2(-scale * 0.35, -scale * 1.35), Vector2(scale * 0.7, scale * 0.55)), silhouette, true)
+		_:
+			draw_circle(center, scale, silhouette)
+			draw_circle(center, scale * 0.45, shadow)
 
 
 ## Клик по клетке -> координаты (пригодится для ставок по клеткам).

@@ -39,6 +39,7 @@ var _field_rules: Dictionary = {"registeredPlayers": 1, "legendaryCounts": {}}
 var _round_clues: Array[String] = []
 var _clue_seed: int = -1
 var _round_clue_label: Label
+var _last_logged_clue: String = ""
 var _auction_settled: bool = false
 ## Ставки предыдущего завершённого раунда, доступные для отображения.
 var _revealed_round_bids: Dictionary = {}
@@ -793,6 +794,7 @@ func _local_catalog_items() -> Array:
 		var item: Dictionary = GameData.SELLABLE_ITEMS[item_id].duplicate(true)
 		item["id"] = item_id
 		item["type"] = "sellable"
+		item["subcategory"] = _item_subcategory(item)
 		item["rarity"] = int(item.get("quality", 1))
 		item["baseCost"] = int(item.get("cost", 0))
 		result.append(item)
@@ -803,6 +805,7 @@ func _local_catalog_items() -> Array:
 			gear["id"] = "%s_q%d" % [gear_id, quality]
 			gear["baseId"] = gear_id
 			gear["type"] = "equipment"
+			gear["subcategory"] = _item_subcategory({"gear_class_id": gear_id, "title": gear.get("title", ""), "type": "equipment"})
 			gear["quality"] = quality
 			gear["rarity"] = quality
 			gear["baseCost"] = int(gear.get("base_cost", 0))
@@ -814,6 +817,7 @@ func _local_catalog_items() -> Array:
 		var ingredient: Dictionary = GameData.ALCHEMY_INGREDIENTS[ingredient_id].duplicate(true)
 		ingredient["id"] = ingredient_id
 		ingredient["type"] = "ingredient"
+		ingredient["subcategory"] = "Ингредиент"
 		ingredient["baseCost"] = int(ingredient.get("cost", 0))
 		ingredient["description"] = "Ингредиент для Башни алхимии."
 		result.append(ingredient)
@@ -881,7 +885,7 @@ func _catalog_card(item: Dictionary) -> PanelContainer:
 	info.add_child(name_label)
 	var meta := Label.new()
 	meta.text = "%s • %s • %d монет" % [
-		String(item.get("type", "предмет")), _catalog_rarity_name(quality),
+		"%s (%s)" % [String(item.get("type", "предмет")), String(item.get("subcategory", _item_subcategory(item)))], _catalog_rarity_name(quality),
 		int(item.get("baseCost", item.get("cost", 0)))]
 	meta.add_theme_font_size_override("font_size", 11)
 	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1611,12 +1615,15 @@ func _build_round_clues(seed: int) -> void:
 	var pool: Array[String] = []
 	var quality_counts: Dictionary = {}
 	var type_counts: Dictionary = {}
+	var subcategory_counts: Dictionary = {}
 	var size_counts: Dictionary = {}
 	for item: Dictionary in field_items:
 		var quality := int(item.get("quality", 1))
 		quality_counts[quality] = int(quality_counts.get(quality, 0)) + 1
 		var item_type := String(item.get("type", "Предмет"))
 		type_counts[item_type] = int(type_counts.get(item_type, 0)) + 1
+		var subcategory := String(item.get("subcategory", _item_subcategory(item)))
+		subcategory_counts[subcategory] = int(subcategory_counts.get(subcategory, 0)) + 1
 		var size := "%d×%d" % [int(item.get("w", 1)), int(item.get("h", 1))]
 		size_counts[size] = int(size_counts.get(size, 0)) + 1
 	pool.append("На поле находится %d предметов." % field_items.size())
@@ -1625,6 +1632,8 @@ func _build_round_clues(seed: int) -> void:
 			pool.append("На поле находится %d предметов качества «%s»." % [int(quality_counts[quality]), GameData.QUALITY_NAMES[quality]])
 	for item_type: String in type_counts:
 		pool.append("На поле находится %d предметов типа «%s»." % [int(type_counts[item_type]), _round_clue_type_label(item_type)])
+	for subcategory: String in subcategory_counts:
+		pool.append("На поле находится %d предметов подкатегории «%s»." % [int(subcategory_counts[subcategory]), subcategory])
 	for size: String in size_counts:
 		pool.append("На поле находится %d предметов размером %s клеток." % [int(size_counts[size]), size])
 	if field_items.size() >= 2:
@@ -1652,7 +1661,12 @@ func _update_round_clue(round_number: int) -> void:
 	if _round_clue_label == null:
 		return
 	if round_number >= 1 and round_number <= _round_clues.size():
-		_round_clue_label.text = "Публичное свойство раунда: %s" % _round_clues[round_number - 1]
+		var clue := _round_clues[round_number - 1]
+		_round_clue_label.text = "Публичное свойство раунда: %s" % clue
+		if clue != _last_logged_clue:
+			_last_logged_clue = clue
+			add_log("[Событие] Раунд %d: %s" % [round_number, clue])
+			set_news("Раунд %d: %s" % [round_number, clue])
 	else:
 		_round_clue_label.text = "Публичное свойство раунда: —"
 
@@ -1665,6 +1679,39 @@ func _round_clue_type_label(item_type: String) -> String:
 		"potion": return "Зелье"
 		"sellable": return "Предмет"
 		_: return item_type.capitalize()
+
+
+func _item_subcategory(item: Dictionary) -> String:
+	var explicit := String(item.get("subcategory", "")).strip_edges()
+	if not explicit.is_empty():
+		return explicit
+	var gear_id := String(item.get("gear_class_id", item.get("gearClassId", ""))).to_lower()
+	var weapon_kind := String(item.get("weaponKind", "")).to_lower()
+	var title := String(item.get("title", item.get("name", ""))).to_lower()
+	var item_type := String(item.get("type", "")).to_lower()
+	if item_type == "potion" or title.contains("зель"):
+		return "Зелье"
+	if item_type == "ingredient" or title.contains("трава") or title.contains("корень") or title.contains("кристалл") or title.contains("мандраг"):
+		return "Ингредиент"
+	if weapon_kind == "dagger" or title.contains("кинжал"):
+		return "Кинжал"
+	if weapon_kind == "sword" or title.contains("меч") or title.contains("топор"):
+		return "Меч"
+	if weapon_kind == "staff" or title.contains("посох"):
+		return "Посох"
+	if title.contains("лук") or title.contains("арбалет"):
+		return "Арбалет"
+	if gear_id.contains("hood") or gear_id.contains("helm") or gear_id.contains("hat") or gear_id.contains("cloak") or gear_id.contains("chest") or gear_id.contains("robe") or gear_id.contains("glove") or gear_id.contains("mitt") or gear_id.contains("boot") or title.contains("щит") or title.contains("кираса") or title.contains("шлем"):
+		return "Доспех"
+	if title.contains("кольц") or title.contains("брош") or title.contains("амулет") or title.contains("корон") or title.contains("скипетр") or title.contains("слеза"):
+		return "Драгоценность"
+	if title.contains("свит") or title.contains("фолиант") or title.contains("гримуар") or title.contains("летопис"):
+		return "Свиток"
+	if title.contains("монет"):
+		return "Монета"
+	if title.contains("чаш") or title.contains("круж") or title.contains("склян") or title.contains("ларец") or title.contains("котел") or title.contains("куб"):
+		return "Сосуд"
+	return "Предмет"
 
 
 ## slot_node_name — один из ключей EQUIP_SLOT_LABELS (например "SlotWeapon").
@@ -1738,6 +1785,7 @@ func add_log(text: String) -> void:
 
 ## Отправляет пул предметов на поле и перерисовывает сетку.
 func rebuild_field() -> void:
+	game_field.reset_reveal()
 	game_field.set_items(field_items)
 
 
@@ -1749,6 +1797,7 @@ func rebuild_field() -> void:
 ## (колонки CSV res://data/magic_auction_items.csv).
 func _place_tier_items(count: int, field_seed: int = -1) -> void:
 	field_items.clear()
+	_last_logged_clue = ""
 	if field_seed >= 0:
 		_item_rng.seed = field_seed
 	else:
@@ -1809,6 +1858,7 @@ func _place_tier_items(count: int, field_seed: int = -1) -> void:
 			"cost": int(info["cost"]),
 			"quality": int(info.get("quality", 1)),
 			"type": String(info.get("type", "sellable")),
+			"subcategory": _item_subcategory(info),
 			"gear_class_id": String(info.get("gear_class_id", "")),
 			"definition_id": String(info.get("definition_id", "")),
 			"size": item_size,
@@ -1834,6 +1884,7 @@ func _make_field_gear_item(gear_id: String, quality: int) -> Dictionary:
 		"cost": equip.cost,
 		"quality": quality,
 		"type": "equipment",
+		"subcategory": _item_subcategory({"gear_class_id": gear_id, "title": equip.item_name, "type": "equipment"}),
 		"gear_class_id": gear_id,
 		"definition_id": gear_id,
 		"size": Vector2i(info["size"]),
@@ -1847,6 +1898,7 @@ func _make_field_ingredient_item(info: Dictionary) -> Dictionary:
 		"cost": int(info.get("cost", 0)),
 		"quality": int(info.get("quality", 1)),
 		"type": "ingredient",
+		"subcategory": "Ингредиент",
 		"size": Vector2i(1, 1),
 		"description": "Ингредиент для Башни алхимии.",
 	}

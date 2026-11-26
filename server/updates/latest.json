@@ -1,8 +1,8 @@
 {
-  "version": "0.2.17",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.17.zip",
-  "sha256": "185513E54623F2B2828D8AB813A6B39BAD4CC4573239D87E144179EFFEFBCE51",
+  "version": "0.2.18",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.18.zip",
+  "sha256": "5DEDA35A19F37292A4ED2EBC47405FB2F29302D17396F7770DE692FF8830913D",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Исправлен вход на аукцион через сервер; во время аукциона заблокированы лишние вкладки."
+  "releaseNotes": "Добавлены подкатегории и силуэты предметов, стоимость после полного раскрытия и события раундовых свойств."
 }
