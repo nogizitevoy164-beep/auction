@@ -158,6 +158,7 @@ func _ready() -> void:
 	_setup_field_selection()
 	_setup_round_clue_label()
 	_setup_calc()
+	game_field.reveal_sequence_finished.connect(_on_reveal_sequence_finished)
 	_server_client = ServerClientS.new()
 	add_child(_server_client)
 	_matchmaking_timer = Timer.new()
@@ -1552,8 +1553,12 @@ func _apply_online_room_snapshot(snapshot: Dictionary) -> void:
 		_auction_finished = true
 		if not _auction_settled:
 			_settle_auction()
-		_show_field_selection_in_game_area()
 		_online_room_id = ""
+
+
+func _on_reveal_sequence_finished() -> void:
+	if _auction_finished and _auction_settled:
+		_show_field_selection_in_game_area()
 
 
 func set_character_name(value: String) -> void:
@@ -2068,7 +2073,6 @@ func _advance_round() -> void:
 		_settle_auction()
 		set_news("Аукцион завершён! Итоги подведены.")
 		add_log("[Игра] Раунд 5 завершён — аукцион окончен!")
-		_show_field_selection_in_game_area()
 		return
 	set_field_round(_field_round + 1)
 
@@ -2087,7 +2091,7 @@ func _settle_auction() -> void:
 	_auction_settled = true
 	_auction_finished = true
 	_set_navigation_locked(false)
-	game_field.reveal_all()
+	game_field.reveal_all_sequential(0.14)
 	var winner := -1
 	var winning_bid := 0
 	var total_lot_value := 0
@@ -2388,7 +2392,6 @@ func _check_early_victory(player_id: int) -> bool:
 	set_news("Досрочная победа — ставка превысила защитный порог!")
 	add_log("[Игра] %s досрочно выиграл аукцион." % _player_name(player_id))
 	_settle_auction()
-	_show_field_selection_in_game_area()
 	return true
 
 

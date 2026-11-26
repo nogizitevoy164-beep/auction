@@ -13,6 +13,7 @@ extends Control
 ## Предмет с подписью появляется, когда открыты ВСЕ его клетки.
 
 signal cell_clicked(row: int, col: int)
+signal reveal_sequence_finished
 
 const FIELD_COLS: int = 20          # клеток по оси X (фиксировано)
 const MIN_ROWS: int = 20            # минимум 20×20; при избытке предметов высота растёт
@@ -45,6 +46,8 @@ var revealed_properties: Dictionary = {}
 var _cell: float = 40.0
 var _rows: int = MIN_ROWS
 var _occupancy: Dictionary = {}   # Vector2i(колонка, ряд) -> индекс предмета
+var _reveal_sequence_token: int = 0
+var _reveal_flash_index: int = -1
 
 
 func _ready() -> void:
@@ -151,9 +154,33 @@ func reveal_item_full(index: int) -> void:
 
 
 func reveal_all() -> void:
+	_reveal_sequence_token += 1
+	_reveal_flash_index = -1
 	for index in items.size():
 		_set_item_property(index, "full")
 	queue_redraw()
+
+
+## Красивое финальное раскрытие: предметы открываются по одному прямо на поле.
+## Сигнал завершения позволяет интерфейсу показать следующий экран только
+## после того, как игрок увидел весь выигранный лот.
+func reveal_all_sequential(step_delay: float = 0.14) -> void:
+	_reveal_sequence_token += 1
+	var sequence_token := _reveal_sequence_token
+	_reveal_flash_index = -1
+	if items.is_empty():
+		reveal_sequence_finished.emit()
+		return
+	for index in items.size():
+		if sequence_token != _reveal_sequence_token:
+			return
+		_set_item_property(index, "full")
+		_reveal_flash_index = index
+		queue_redraw()
+		await get_tree().create_timer(maxf(0.06, step_delay)).timeout
+	_reveal_flash_index = -1
+	queue_redraw()
+	reveal_sequence_finished.emit()
 
 
 func _reset_property_reveals() -> void:
@@ -292,6 +319,10 @@ func _draw() -> void:
 		var cost_text := "◉ %d" % int(item.get("cost", 0))
 		draw_string(font, rect.end - Vector2(7.0, 7.0), cost_text,
 				HORIZONTAL_ALIGNMENT_RIGHT, rect.size.x - 12.0, maxi(10, int(_cell * 0.32)), Color.WHITE)
+		if _reveal_flash_index == i:
+			var flash_rect := rect.grow(-3.0)
+			draw_rect(flash_rect, Color(1.0, 0.94, 0.72, 0.26), true)
+			draw_rect(flash_rect, Color(1.0, 0.95, 0.78, 0.95), false, 4.0)
 	# 4) Сетка поверх.
 	for c in FIELD_COLS + 1:
 		var x := c * _cell
