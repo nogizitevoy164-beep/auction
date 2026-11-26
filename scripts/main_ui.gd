@@ -1201,19 +1201,10 @@ func _use_potion_inventory_item(index: int) -> void:
 func _reveal_one_field_item() -> void:
 	if game_field == null:
 		return
-	for item: Dictionary in field_items:
-		var fully_revealed := true
-		for row in range(int(item.get("row", 0)), int(item.get("row", 0)) + int(item.get("h", 1))):
-			for col in range(int(item.get("col", 0)), int(item.get("col", 0)) + int(item.get("w", 1))):
-				if not game_field.revealed.has(Vector2i(col, row)):
-					fully_revealed = false
-		if fully_revealed:
-			continue
-		for row in range(int(item.get("row", 0)), int(item.get("row", 0)) + int(item.get("h", 1))):
-			for col in range(int(item.get("col", 0)), int(item.get("col", 0)) + int(item.get("w", 1))):
-				game_field.revealed[Vector2i(col, row)] = true
-		game_field.queue_redraw()
-		return
+	for index in field_items.size():
+		if not game_field.is_item_fully_revealed(index):
+			game_field.reveal_item_full(index)
+			return
 
 
 func _is_market_item(item: Dictionary) -> bool:
@@ -2096,6 +2087,7 @@ func _settle_auction() -> void:
 	_auction_settled = true
 	_auction_finished = true
 	_set_navigation_locked(false)
+	game_field.reveal_all()
 	var winner := -1
 	var winning_bid := 0
 	var total_lot_value := 0

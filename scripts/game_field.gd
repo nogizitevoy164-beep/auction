@@ -39,6 +39,8 @@ var current_round: int = 0
 var items: Array = []
 ## Открытые клетки: ключ Vector2i(колонка, ряд) -> true.
 var revealed: Dictionary = {}
+## Известные свойства предметов: размер, качество, подкатегория, полная информация.
+var revealed_properties: Dictionary = {}
 
 var _cell: float = 40.0
 var _rows: int = MIN_ROWS
@@ -82,6 +84,7 @@ func rows_visible() -> int:
 ## Заменяет пул предметов и перестраивает карту занятости клеток.
 func set_items(new_items: Array) -> void:
 	items = new_items.duplicate(true)
+	_reset_property_reveals()
 	_rebuild_occupancy()
 	_recalculate()
 	queue_redraw()
@@ -107,6 +110,7 @@ func _rebuild_occupancy() -> void:
 ## Сброс раскрытия (новый аукцион): сокровища снова полностью скрыты.
 func reset_reveal() -> void:
 	revealed = {}
+	_reset_property_reveals()
 	current_round = 0
 	queue_redraw()
 
@@ -116,30 +120,7 @@ func reset_reveal() -> void:
 ## раунд открывает больше клеток, чем предыдущий.
 func reveal_for_round(round: int, reveal_seed: int = -1) -> void:
 	current_round = clampi(round, 1, 5)
-	var total_cells: int = FIELD_COLS * _rows
-	var to_reveal: int = mini(REVEAL_PER_ROUND[current_round - 1], total_cells)
-
-	# Собираем ещё закрытые клетки видимой области.
-	var hidden_cells: Array[Vector2i] = []
-	for r: int in _rows:
-		for c: int in FIELD_COLS:
-			var key := Vector2i(c, r)
-			if not revealed.has(key):
-				hidden_cells.append(key)
-
-	# Открываем случайные из них.
-	if reveal_seed >= 0:
-		var reveal_rng := RandomNumberGenerator.new()
-		reveal_rng.seed = reveal_seed + current_round * 7919
-		for index in range(hidden_cells.size() - 1, 0, -1):
-			var swap_index := reveal_rng.randi_range(0, index)
-			var cell := hidden_cells[index]
-			hidden_cells[index] = hidden_cells[swap_index]
-			hidden_cells[swap_index] = cell
-	else:
-		hidden_cells.shuffle()
-	for i: int in mini(to_reveal, hidden_cells.size()):
-		revealed[hidden_cells[i]] = true
+	_reveal_public_properties(current_round, reveal_seed)
 	queue_redraw()
 
 
@@ -148,23 +129,90 @@ func revealed_count() -> int:
 	return revealed.size()
 
 
-## Полностью ли открыт предмет (все его клетки видимы) — тогда видна подпись.
+## Полностью ли открыт предмет — тогда видны картинка, название и стоимость.
 func is_item_fully_revealed(index: int) -> bool:
-	var item: Dictionary = items[index]
-	for r: int in range(int(item.row), int(item.row) + int(item.h)):
-		for c: int in range(int(item.col), int(item.col) + int(item.w)):
-			if not revealed.has(Vector2i(c, r)):
-				return false
-	return true
+	return bool(revealed_properties.get(index, {}).get("full", false))
 
 
 func is_item_partially_revealed(index: int) -> bool:
-	var item: Dictionary = items[index]
-	for r: int in range(int(item.get("row", 0)), int(item.get("row", 0)) + int(item.get("h", 1))):
-		for c: int in range(int(item.get("col", 0)), int(item.get("col", 0)) + int(item.get("w", 1))):
-			if revealed.has(Vector2i(c, r)):
-				return true
-	return false
+	var known: Dictionary = revealed_properties.get(index, {})
+	return bool(known.get("size", false)) or bool(known.get("quality", false)) or bool(known.get("subcategory", false)) or bool(known.get("full", false))
+
+
+func is_property_known(index: int, property_name: String) -> bool:
+	return bool(revealed_properties.get(index, {}).get(property_name, false))
+
+
+func reveal_item_full(index: int) -> void:
+	if index < 0 or index >= items.size():
+		return
+	_set_item_property(index, "full")
+	queue_redraw()
+
+
+func reveal_all() -> void:
+	for index in items.size():
+		_set_item_property(index, "full")
+	queue_redraw()
+
+
+func _reset_property_reveals() -> void:
+	revealed_properties = {}
+	for index in items.size():
+		revealed_properties[index] = {"size": false, "quality": false, "subcategory": false, "full": false}
+		items[index]["size_known"] = false
+
+
+func _set_item_property(index: int, property_name: String) -> void:
+	if index < 0 or index >= items.size():
+		return
+	var known: Dictionary = revealed_properties.get(index, {"size": false, "quality": false, "subcategory": false, "full": false})
+	if property_name == "full":
+		known["size"] = true
+		known["quality"] = true
+		known["subcategory"] = true
+		known["full"] = true
+	else:
+		known[property_name] = true
+	revealed_properties[index] = known
+	items[index]["size_known"] = bool(known.get("size", false))
+	if bool(known.get("size", false)):
+		var item: Dictionary = items[index]
+		for row in range(int(item.get("row", 0)), int(item.get("row", 0)) + int(item.get("h", 1))):
+			for col in range(int(item.get("col", 0)), int(item.get("col", 0)) + int(item.get("w", 1))):
+				revealed[Vector2i(col, row)] = true
+
+
+func _reveal_public_properties(round_number: int, reveal_seed: int) -> void:
+	if items.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = (reveal_seed if reveal_seed >= 0 else 1) + round_number * 7919
+	var indices: Array[int] = []
+	for index in items.size():
+		indices.append(index)
+	for index in range(indices.size() - 1, 0, -1):
+		var swap_index := rng.randi_range(0, index)
+		var temp := indices[index]
+		indices[index] = indices[swap_index]
+		indices[swap_index] = temp
+	var size_count := mini(3, indices.size())
+	var quality_count := mini(2, indices.size())
+	var subtype_count := mini(2, indices.size())
+	if round_number == 1:
+		for i in size_count: _set_item_property(indices[i], "size")
+		for i in quality_count: _set_item_property(indices[(i + size_count) % indices.size()], "quality")
+	elif round_number == 2:
+		for i in quality_count: _set_item_property(indices[i], "quality")
+		for i in subtype_count: _set_item_property(indices[(i + quality_count) % indices.size()], "subcategory")
+	elif round_number == 3:
+		for i in size_count: _set_item_property(indices[i], "size")
+		for i in subtype_count: _set_item_property(indices[(i + size_count) % indices.size()], "subcategory")
+	elif round_number == 4:
+		for i in quality_count: _set_item_property(indices[i], "quality")
+		for i in subtype_count: _set_item_property(indices[(i + quality_count) % indices.size()], "subcategory")
+	else:
+		for i in mini(3, indices.size()): _set_item_property(indices[i], "full")
 
 
 func _draw() -> void:
@@ -180,6 +228,9 @@ func _draw() -> void:
 	# 2) Места предметов затемняются как крупные области на поле. Размер и
 	# цвет рамки остаются видимыми даже до полного раскрытия.
 	for item: Dictionary in items:
+		var item_index := items.find(item)
+		if item_index < 0 or not is_property_known(item_index, "size"):
+			continue
 		var item_rect := Rect2(
 				int(item.get("col", 0)) * _cell, int(item.get("row", 0)) * _cell,
 				int(item.get("w", 1)) * _cell, int(item.get("h", 1)) * _cell)
@@ -198,6 +249,12 @@ func _draw() -> void:
 		var quality_color: Color = item.get("color", Color(0.60, 0.60, 0.70))
 		var revealed_item := is_item_fully_revealed(i)
 		var partially_revealed := is_item_partially_revealed(i)
+		var size_known := is_property_known(i, "size")
+		var quality_known := is_property_known(i, "quality") or revealed_item
+		if not size_known and not revealed_item:
+			continue
+		if not quality_known:
+			quality_color = Color(0.55, 0.58, 0.68, 1.0)
 		# Неоновая подсветка качества и толстая рамка как у предметных ячеек
 		# из референса.
 		var glow := quality_color
@@ -208,15 +265,19 @@ func _draw() -> void:
 		# До первого раскрытия нет ни категории, ни силуэта: предмет полностью скрыт.
 		if not partially_revealed:
 			continue
-		var subtype := String(item.get("subcategory", "Предмет"))
+		var subtype_known := is_property_known(i, "subcategory") or revealed_item
+		var subtype := String(item.get("subcategory", "Предмет")) if subtype_known else "Сокровище"
 		var type_text := "%s · %s" % [_item_type_label(String(item.get("type", "item"))), subtype]
 		var size_text := "%d×%d" % [int(item.get("w", 1)), int(item.get("h", 1))]
 		var small_size := maxi(9, int(_cell * 0.28))
-		draw_string(font, rect.position + Vector2(4.0, small_size + 3.0), type_text,
-				HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 8.0, small_size, Color.WHITE)
+		if subtype_known:
+			draw_string(font, rect.position + Vector2(4.0, small_size + 3.0), type_text,
+					HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 8.0, small_size, Color.WHITE)
 		draw_string(font, Vector2(rect.position.x, rect.end.y - 5.0), size_text,
 				HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, small_size, quality_color.lightened(0.25))
 		if not revealed_item:
+			if not subtype_known:
+				continue
 			_draw_item_silhouette(rect, subtype, quality_color)
 			continue
 		var icon_path := String(item.get("icon", ""))
@@ -289,6 +350,8 @@ func _item_type_label(item_type: String) -> String:
 
 func _grid_line_inside_item(line_index: int, segment: int, vertical: bool) -> bool:
 	for item: Dictionary in items:
+		if not bool(item.get("size_known", false)):
+			continue
 		var item_col := int(item.get("col", 0))
 		var item_row := int(item.get("row", 0))
 		var item_w := int(item.get("w", 1))

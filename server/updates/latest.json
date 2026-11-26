@@ -1,8 +1,8 @@
 {
-  "version": "0.2.18",
-  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.18.zip",
-  "sha256": "5DEDA35A19F37292A4ED2EBC47405FB2F29302D17396F7770DE692FF8830913D",
+  "version": "0.2.19",
+  "download": "https://www.arh.seaetr.online/updates/Auction_0.2.19.zip",
+  "sha256": "0BB79F9547FC2A74813ACC03F6A8807AD0726C63892A79F5B4417F8743804AB9",
   "mandatory": false,
   "minClientVersion": "0.2.0",
-  "releaseNotes": "Добавлены подкатегории и силуэты предметов, стоимость после полного раскрытия и события раундовых свойств."
+  "releaseNotes": "Раскрытие предметов переведено на модель Magic Auction: отдельные свойства открываются по раундам, полная информация — после полного раскрытия."
 }
